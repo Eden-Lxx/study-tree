@@ -1,8 +1,15 @@
 'use strict';
 
 /*
- * study-tree · 本地服务（多用户版）
- * 零依赖，只用 Node 内置模块。
+ * study-tree · 后端服务（多用户版）
+ * 零依赖，只用 Node 内置模块，`node server.js` 即可启动。
+ *
+ * 功能一览：
+ *   - 账号：注册/登录/登出（scrypt 加盐哈希 + httpOnly Cookie 会话）、昵称、头像
+ *   - 学习树：能力/知识节点的增删改、点亮、周常任务重置、等级经验
+ *   - 笔记：md/pdf/doc/docx/ppt/pptx/图片 的上传、阅读、下载（按账号隔离）
+ *   - 蓝图：发布/导入/评分，可见性分 公开 / 仅好友 / 私人，市场 + 好友蓝图筛选
+ *   - 社交：好友（申请-同意制）、访客模式、管理员后台、意见反馈
  *
  * 目录结构：
  *   data/users.json            账号表（scrypt 加盐，不存明文）
@@ -527,6 +534,13 @@ const BP_CATEGORIES = [
   { id: 'other', name: '其他' }
 ];
 const BP_CAT_IDS = BP_CATEGORIES.map((c) => c.id);
+// 蓝图可见性：public 公开 / friends 仅好友可见 / private 私人
+const BP_VISIBILITIES = [
+  { id: 'public', name: '公开' },
+  { id: 'friends', name: '仅好友' },
+  { id: 'private', name: '私人' }
+];
+const BP_VIS_IDS = BP_VISIBILITIES.map((v) => v.id);
 // 试运行阶段默认 0（不拦截）。将来要「高于一定分数才能上架」时设成比如 60。
 const BP_MIN_SCORE = Number(process.env.BP_MIN_SCORE || 0) || 0;
 
@@ -545,6 +559,20 @@ function bpCategoryOf(b) {
   if (/艺术|绘画|素描|音乐|设计|摄影/.test(title)) return 'art';
   if (/学习|数学|编程|语言|阅读|算法/.test(title)) return 'study';
   return 'other';
+}
+
+function bpVisibilityName(id) {
+  const v = BP_VISIBILITIES.find((x) => x.id === id);
+  return v ? v.name : '公开';
+}
+
+/* 当前用户能否看到某份蓝图：自己总是能看；公开所有人；仅好友需是好友；私人只有自己 */
+function canSeeBp(uid, b) {
+  if (!b || b.ownerId === uid) return true;
+  const vis = b.visibility || 'public';
+  if (vis === 'public') return true;
+  if (vis === 'friends') return areFriends(uid, b.ownerId);
+  return false;
 }
 
 /* 试运行评分：标题 + 说明 + 节点 + 节点笔记 + 附件 五个维度，总分 100 */
@@ -914,14 +942,18 @@ async function handleApi(req, res, url, user) {
     const scope = String(url.searchParams.get('scope') || 'all');
     const cat = String(url.searchParams.get('cat') || '');
     const q = String(url.searchParams.get('q') || '').trim().toLowerCase();
+    const friendOnly = url.searchParams.get('friend') === '1';
 
     const all = await loadBlueprints();
     let list = all.filter((b) => {
       const mine = b.ownerId === uid;
       if (scope === 'mine') return mine;
-      if (scope === 'others') return !mine;
-      return true;
+      if (scope === 'others') return !mine && canSeeBp(uid, b);
+      return canSeeBp(uid, b);
     });
+
+    // 「好友蓝图」：只看好友发布的（不含自己），且仅保留好友可见的那部分
+    if (friendOnly) list = list.filter((b) => b.ownerId !== uid && areFriends(uid, b.ownerId));
 
     if (q) {
       list = list.filter((b) =>
@@ -931,9 +963,12 @@ async function handleApi(req, res, url, user) {
       );
     }
 
-    const counts = { all: list.length };
+    const counts = { all: list.length, friends: 0 };
     BP_CAT_IDS.forEach((id) => { counts[id] = 0; });
-    list.forEach((b) => { counts[b.category] = (counts[b.category] || 0) + 1; });
+    list.forEach((b) => {
+      counts[b.category] = (counts[b.category] || 0) + 1;
+      if (b.ownerId !== uid && areFriends(uid, b.ownerId)) counts.friends++;
+    });
 
     if (cat && BP_CAT_IDS.indexOf(cat) > -1) list = list.filter((b) => b.category === cat);
 
@@ -946,6 +981,8 @@ async function handleApi(req, res, url, user) {
           id: b.id, title: b.title, note: b.note, ownerName: b.ownerName,
           ownerId: b.ownerId,
           category: b.category, categoryName: b.categoryName,
+          visibility: b.visibility || 'public',
+          visibilityName: bpVisibilityName(b.visibility || 'public'),
           nodeCount: b.nodes.length,
           fileCount: b.files.length, size: b.size,
           createdAt: b.createdAt, updatedAt: b.updatedAt || b.createdAt,
@@ -1001,6 +1038,7 @@ async function handleApi(req, res, url, user) {
       ownerName: displayNameOf(user),
       category: bpCategory,
       categoryName: bpCatName(bpCategory),
+      visibility: BP_VIS_IDS.indexOf(String(body.visibility || '')) > -1 ? String(body.visibility) : 'public',
       treeCategoryName: treeCat ? treeCat.name : '',
       sourceNodeId: sub.root.id,
       createdAt: Date.now(),
@@ -1018,7 +1056,7 @@ async function handleApi(req, res, url, user) {
     const list = await loadBlueprints();
     list.push({
       id: bp.id, title: bp.title, note: bp.note, ownerId: bp.ownerId, ownerName: bp.ownerName,
-      category: bp.category, categoryName: bp.categoryName,
+      category: bp.category, categoryName: bp.categoryName, visibility: bp.visibility,
       sourceNodeId: bp.sourceNodeId, treeCategoryName: bp.treeCategoryName,
       createdAt: bp.createdAt, updatedAt: bp.updatedAt, size: bp.size,
       nodes: bp.nodes, files: bp.files
@@ -1041,6 +1079,7 @@ async function handleApi(req, res, url, user) {
 
     /* 详情：给「我的蓝图库」看里面有哪些节点 */
     if (req.method === 'GET' && !action) {
+      if (!canSeeBp(uid, bp)) return fail(res, 403, '这个蓝图只对作者/好友可见');
       return sendJson(res, 200, {
         blueprint: {
           id: bp.id,
@@ -1050,6 +1089,8 @@ async function handleApi(req, res, url, user) {
           mine: bp.ownerId === uid,
           category: bp.category,
           categoryName: bp.categoryName,
+          visibility: bp.visibility || 'public',
+          visibilityName: bpVisibilityName(bp.visibility || 'public'),
           sourceNodeId: bp.sourceNodeId || '',
           score: scoreBlueprint(bp).score,
           scoreParts: scoreBlueprint(bp).parts,
@@ -1084,6 +1125,10 @@ async function handleApi(req, res, url, user) {
         bp.category = String(body.category);
         bp.categoryName = bpCatName(bp.category);
       }
+      if (body.visibility !== undefined) {
+        if (BP_VIS_IDS.indexOf(String(body.visibility)) < 0) return fail(res, 400, '可见性不合法');
+        bp.visibility = String(body.visibility);
+      }
       bp.updatedAt = Date.now();
       await writeJson(path.join(BP_DIR, bpId, 'blueprint.json'), bp);
 
@@ -1092,7 +1137,7 @@ async function handleApi(req, res, url, user) {
       if (idx > -1) {
         list[idx] = Object.assign({}, list[idx], {
           title: bp.title, note: bp.note, category: bp.category,
-          categoryName: bp.categoryName, updatedAt: bp.updatedAt
+          categoryName: bp.categoryName, visibility: bp.visibility, updatedAt: bp.updatedAt
         });
         await saveBlueprints(list);
       }
@@ -1101,7 +1146,7 @@ async function handleApi(req, res, url, user) {
         blueprint: {
           id: bp.id, title: bp.title, note: bp.note,
           category: bp.category, categoryName: bp.categoryName,
-          updatedAt: bp.updatedAt
+          visibility: bp.visibility, updatedAt: bp.updatedAt
         }
       });
     }
@@ -1162,6 +1207,7 @@ async function handleApi(req, res, url, user) {
     }
 
     if (isImport && req.method === 'POST') {
+      if (!canSeeBp(uid, bp)) return fail(res, 403, '这个蓝图只对作者/好友可见');
       let body = {};
       try { body = JSON.parse((await readBody(req)).toString('utf8') || '{}'); } catch (e) {}
 

@@ -1,3 +1,6 @@
+# study-tree · 一键容器编排（学习树）
+# 用法：docker compose up -d --build   数据会持久化到本机 ./data。
+# 只监听 127.0.0.1:8080，公网访问请在前面加 Nginx/Caddy 反代 + HTTPS。
 services:
   tech-tree:
     build: .

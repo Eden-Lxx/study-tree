@@ -1,5 +1,8 @@
 @echo off
 chcp 65001 >nul
+REM study-tree - public tunnel script
+REM Uses cloudflared to expose local 5173 as a temporary public HTTPS URL.
+REM Run launch script first; cloudflared.exe is auto-downloaded if missing.
 title Tech Tree - public tunnel, close this window to stop
 cd /d "%~dp0"
 

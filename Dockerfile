@@ -1,4 +1,5 @@
-# 科技树 · 容器镜像（用于云服务器 / 容器平台部署）
+# study-tree · 容器镜像（学习树，用于云服务器 / 容器平台部署）
+# 基于 Node 20 Alpine，以非 root 用户运行；数据挂载到 /data。
 FROM node:20-alpine
 
 WORKDIR /app

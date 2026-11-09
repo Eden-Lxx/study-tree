@@ -1,3 +1,5 @@
+# study-tree · Docker 构建时排除的文件（学习树）
+# 这些内容不会打进镜像：账号数据、依赖、版本库、文档、启动脚本。
 data
 node_modules
 .git

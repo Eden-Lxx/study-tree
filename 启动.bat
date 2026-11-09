@@ -1,5 +1,8 @@
 @echo off
 chcp 65001 >nul
+REM study-tree - local start script
+REM Finds Node.js and runs server.js (listens on 0.0.0.0:5173).
+REM Double-click to start; close this window to stop the server.
 title study-tree - local server (close this window to stop)
 cd /d "%~dp0"
 
