@@ -1,0 +1,14 @@
+{
+  "name": "study-tree",
+  "version": "1.0.0",
+  "private": true,
+  "description": "study-tree（学习树）：科技点 / 能力图谱 + 蓝图市场 + 多用户 + 笔记",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED"
+}

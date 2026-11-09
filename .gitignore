@@ -1,0 +1,23 @@
+# 数据、账号与密钥 —— 绝不提交
+/data/
+
+# 工作区内部目录
+/.workbuddy/
+
+# 依赖与运行时
+node_modules/
+
+# 二进制与工具
+cloudflared.exe
+config.yml
+
+# 日志与备份
+*.log
+*.tgz
+
+# 临时测试目录
+/.t*/
+
+# 系统文件
+.DS_Store
+Thumbs.db

@@ -1,0 +1,20 @@
+services:
+  tech-tree:
+    build: .
+    container_name: tech-tree
+    # 只映射到本机回环，公网访问一律走 Nginx / Caddy 反代 + HTTPS
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      PORT: 8080
+      HOST: 0.0.0.0
+      TT_DATA_DIR: /data
+      TT_PUBLIC: "1"
+      # 想关闭自助注册就打开下面这行
+      # TT_CLOSE_REGISTER: "1"
+      NO_OPEN: "1"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
