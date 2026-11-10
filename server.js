@@ -519,13 +519,15 @@ function sanitizeTree(raw) {
     const name = typeof f.name === 'string' && f.name.trim() ? f.name.trim().slice(0, 160) : '';
     if (!name) return;
     fileIds.add(id);
+    const isLocal = f.local === true;
     files.push({
       id: id,
       nodeId: nodeId,
       name: name,
       mime: typeof f.mime === 'string' && f.mime ? f.mime.slice(0, 120) : extMime(name),
       size: isFinite(Number(f.size)) ? Math.max(0, Math.floor(Number(f.size))) : 0,
-      storedAs: typeof f.storedAs === 'string' ? safeFileName(f.storedAs) : '',
+      storedAs: isLocal ? '' : (typeof f.storedAs === 'string' ? safeFileName(f.storedAs) : ''),
+      local: isLocal,
       createdAt: isFinite(Number(f.createdAt)) ? Math.floor(Number(f.createdAt)) : Date.now()
     });
   });
@@ -1032,6 +1034,8 @@ async function handleApi(req, res, url, user) {
           fileCount: b.files.length, size: b.size,
           createdAt: b.createdAt, updatedAt: b.updatedAt || b.createdAt,
           sourceNodeId: b.sourceNodeId || '',
+          cover: (b.images && b.images.length) ? ('/api/blueprints/' + b.id + '/images/' + b.images[0].id) : '',
+          imageCount: (b.images || []).length,
           score: sc.score,
           belowThreshold: BP_MIN_SCORE > 0 && sc.score < BP_MIN_SCORE,
           mine: b.ownerId === uid
@@ -1058,6 +1062,7 @@ async function handleApi(req, res, url, user) {
 
     const files = [];
     for (const f of sub.files) {
+      if (f.local) continue; // 本地笔记不打包进蓝图：服务器没有文件内容，蓝图只带描述和图
       const src = notePathFor(uid, f.storedAs);
       let storedAs = '';
       if (src && fs.existsSync(src)) {
@@ -1068,6 +1073,31 @@ async function handleApi(req, res, url, user) {
         id: f.id, nodeId: f.nodeId, name: f.name, mime: f.mime,
         size: f.size, storedAs: storedAs, createdAt: f.createdAt
       });
+    }
+
+    // 蓝图配图：最多 3 张，每张 ≤ 2MB（base64 dataURL）
+    const images = [];
+    const rawImages = Array.isArray(body.images) ? body.images.slice(0, 3) : [];
+    if (rawImages.length) {
+      const imgDir = path.join(dir, 'images');
+      await fsp.mkdir(imgDir, { recursive: true });
+      for (const img of rawImages) {
+        if (!img || typeof img !== 'object') continue;
+        const m = /^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/i.exec(String(img.data || ''));
+        if (!m) continue;
+        const buf = Buffer.from(m[2], 'base64');
+        if (!buf.length || buf.length > 2 * 1024 * 1024) continue;
+        const imgId = newId('img');
+        const storedAs = `${imgId}-${safeFileName(img.name || 'image.png')}`;
+        await fsp.writeFile(path.join(imgDir, storedAs), buf);
+        images.push({
+          id: imgId,
+          name: String(img.name || 'image').slice(0, 80),
+          mime: m[1],
+          size: buf.length,
+          storedAs: storedAs
+        });
+      }
     }
 
     const treeCat = tree.categories.find((c) => c.id === sub.root.categoryId);
@@ -1093,7 +1123,8 @@ async function handleApi(req, res, url, user) {
         id: n.id, name: n.name, cost: n.cost, unlocked: n.unlocked, kind: n.kind,
         parentId: n.parentId, prereqId: n.prereqId, note: n.note
       })),
-      files: files
+      files: files,
+      images: images
     };
     const bp = Object.assign(bpBase, scoreBlueprint(bpBase));
     await writeJson(path.join(dir, 'blueprint.json'), bp);
@@ -1104,10 +1135,32 @@ async function handleApi(req, res, url, user) {
       category: bp.category, categoryName: bp.categoryName, visibility: bp.visibility,
       sourceNodeId: bp.sourceNodeId, treeCategoryName: bp.treeCategoryName,
       createdAt: bp.createdAt, updatedAt: bp.updatedAt, size: bp.size,
-      nodes: bp.nodes, files: bp.files
+      nodes: bp.nodes, files: bp.files, images: bp.images || []
     });
     await saveBlueprints(list);
     return sendJson(res, 201, { ok: true, blueprint: bp });
+  }
+
+  /* 蓝图配图 */
+  const bpImgMatch = p.match(/^\/api\/blueprints\/([^/]+)\/images\/([^/]+)$/);
+  if (bpImgMatch && req.method === 'GET') {
+    const bpId0 = safeFileName(bpImgMatch[1]);
+    const imgId = safeFileName(bpImgMatch[2]);
+    const bp0 = await readJson(path.join(BP_DIR, bpId0, 'blueprint.json'), null);
+    if (!bp0) return fail(res, 404, '蓝图不存在');
+    if (!canSeeBp(uid, bp0)) return fail(res, 403, '无权查看这个蓝图');
+    const img = (bp0.images || []).find((x) => x.id === imgId);
+    if (!img) return fail(res, 404, '图片不存在');
+    const full = path.join(BP_DIR, bpId0, 'images', safeFileName(img.storedAs || ''));
+    let st;
+    try { st = await fsp.stat(full); } catch (e) { return fail(res, 404, '图片文件不存在'); }
+    res.writeHead(200, {
+      'Content-Type': img.mime || 'image/png',
+      'Content-Length': st.size,
+      'Cache-Control': 'public, max-age=86400'
+    });
+    fs.createReadStream(full).pipe(res);
+    return;
   }
 
   const bpMatch = p.match(/^\/api\/blueprints\/([^/]+)(?:\/(import|refresh))?$/);
@@ -1147,7 +1200,8 @@ async function handleApi(req, res, url, user) {
             id: x.id, name: x.name, kind: x.kind, cost: x.cost,
             parentId: x.parentId || null, prereqId: x.prereqId || null
           })),
-          files: (bp.files || []).map((x) => ({ name: x.name, size: x.size }))
+          files: (bp.files || []).map((x) => ({ name: x.name, size: x.size })),
+          images: (bp.images || []).map((x) => ({ id: x.id, name: x.name, size: x.size, mime: x.mime }))
         }
       });
     }
@@ -1173,6 +1227,43 @@ async function handleApi(req, res, url, user) {
       if (body.visibility !== undefined) {
         if (BP_VIS_IDS.indexOf(String(body.visibility)) < 0) return fail(res, 400, '可见性不合法');
         bp.visibility = String(body.visibility);
+      }
+      /* 配图：带上 id 的表示保留原图，带 data 的表示新增（最多 3 张） */
+      if (body.images !== undefined) {
+        const imgDir = path.join(BP_DIR, bpId, 'images');
+        const oldImages = bp.images || [];
+        const next = [];
+        const raw = Array.isArray(body.images) ? body.images.slice(0, 3) : [];
+        let ensuredDir = false;
+        for (const img of raw) {
+          if (!img || typeof img !== 'object') continue;
+          if (img.id) {
+            const hit = oldImages.find((x) => x.id === img.id);
+            if (hit) { next.push(hit); continue; }
+          }
+          const m = /^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/i.exec(String(img.data || ''));
+          if (!m) continue;
+          const buf = Buffer.from(m[2], 'base64');
+          if (!buf.length || buf.length > 2 * 1024 * 1024) continue;
+          if (!ensuredDir) { await fsp.mkdir(imgDir, { recursive: true }); ensuredDir = true; }
+          const imgId = newId('img');
+          const storedAs = `${imgId}-${safeFileName(img.name || 'image.png')}`;
+          await fsp.writeFile(path.join(imgDir, storedAs), buf);
+          next.push({
+            id: imgId,
+            name: String(img.name || 'image').slice(0, 80),
+            mime: m[1],
+            size: buf.length,
+            storedAs: storedAs
+          });
+        }
+        const keep = new Set(next.map((x) => x.id));
+        for (const o of oldImages) {
+          if (!keep.has(o.id)) {
+            await fsp.rm(path.join(imgDir, safeFileName(o.storedAs || '')), { force: true }).catch(() => {});
+          }
+        }
+        bp.images = next;
       }
       bp.updatedAt = Date.now();
       await writeJson(path.join(BP_DIR, bpId, 'blueprint.json'), bp);

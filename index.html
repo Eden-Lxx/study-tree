@@ -299,6 +299,11 @@
     border:1px dashed rgba(56,189,248,.35);cursor:pointer;
   }
   .upload-row label:hover{background:rgba(56,189,248,.14)}
+  .local-note{margin-top:10px;padding:8px 10px;border-radius:8px;background:rgba(8,14,24,.42);border:1px solid rgba(122,152,200,.1)}
+  .local-note-state{font-size:11px;color:#6b7d99;line-height:1.5;margin-bottom:6px}
+  .local-note-state[data-on="1"]{color:#7fe3c4}
+  .local-note-acts{display:flex;gap:6px;flex-wrap:wrap}
+  .local-note-acts .mini{font-size:11px;padding:4px 9px;border-radius:6px}
   .save-state{font-family:var(--mono);font-size:10px;color:#4f6480;text-align:right;margin-top:6px;height:14px}
 
   /* ---------- 阅读器 ---------- */
@@ -717,6 +722,12 @@
   .bp-badge.other{background:rgba(245,185,66,.14);color:#f5c264}
   .bp-badge.vis-private{background:rgba(248,113,113,.14);color:#f9a8a8}
   .bp-badge.vis-friends{background:rgba(52,211,153,.16);color:#6ee7b7}
+  .bp-imgs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+  .bp-img-item{position:relative;width:72px;height:72px;border-radius:8px;overflow:hidden;border:1px solid rgba(122,152,200,.16)}
+  .bp-img-item img{width:100%;height:100%;object-fit:cover;display:block}
+  .bp-img-del{position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;border:0;background:rgba(0,0,0,.6);color:#fff;font-size:12px;line-height:1;cursor:pointer;padding:0}
+  .bp-img-add{display:inline-block;cursor:pointer;font-size:11px;padding:4px 9px;border-radius:6px}
+  .bp-cover{width:100%;max-height:130px;object-fit:cover;border-radius:8px;margin-bottom:8px;display:block}
   /* ---------- 时间规划 ---------- */
   .timer-hero{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:6px}
   .timer-sub{font-family:var(--mono);font-size:11px;color:#6b7d99;margin:0 0 12px}
@@ -1044,6 +1055,13 @@
         <label for="file-input">＋ 上传笔记或图片</label>
         <input id="file-input" type="file" accept=".md,.markdown,.pdf,.txt,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.bmp" multiple hidden>
       </div>
+      <div class="local-note">
+        <div class="local-note-state" id="local-note-state">—</div>
+        <div class="local-note-acts">
+          <button class="btn-ghost mini" id="local-pick" type="button">选择本地文件夹</button>
+          <button class="btn-ghost mini" id="local-disconnect" type="button" hidden>断开</button>
+        </div>
+      </div>
 
       <div class="divider"></div>
       <button class="btn-ghost" id="btn-publish" type="button" style="width:100%;margin-bottom:8px" hidden>◈ 把这个父级发布成蓝图</button>
@@ -1312,6 +1330,12 @@
         <option value="private">私人（仅自己可见）</option>
       </select>
     </div>
+    <div class="field">
+      <label>配图（最多 3 张，图片存服务器）</label>
+      <div class="bp-imgs" id="bp-edit-imgs"></div>
+      <label class="btn-ghost mini bp-img-add" for="bp-edit-img-input">＋ 添加图片</label>
+      <input id="bp-edit-img-input" type="file" accept="image/*" multiple hidden>
+    </div>
     <p class="hint" id="bp-edit-meta"></p>
     <div class="bp-score-parts" id="bp-edit-score"></div>
     <div class="bp-node-box" id="bp-edit-nodes"></div>
@@ -1352,6 +1376,12 @@
         <option value="friends">部分公开（仅好友可见）</option>
         <option value="private">私人（仅自己可见）</option>
       </select>
+    </div>
+    <div class="field">
+      <label>配图（最多 3 张，图片存服务器）</label>
+      <div class="bp-imgs" id="bp-pub-imgs"></div>
+      <label class="btn-ghost mini bp-img-add" for="bp-pub-img-input">＋ 添加图片</label>
+      <input id="bp-pub-img-input" type="file" accept="image/*" multiple hidden>
     </div>
     <div class="modal-acts">
       <button class="btn-primary" id="bp-pub-do" type="button">发布</button>
@@ -1565,6 +1595,10 @@
   var $bpEditCancel = document.getElementById('bp-edit-cancel');
   var $bpPubCat = document.getElementById('bp-pub-cat');
   var $bpPubVis = document.getElementById('bp-pub-vis');
+  var $bpPubImgs = document.getElementById('bp-pub-imgs');
+  var $bpPubImgInput = document.getElementById('bp-pub-img-input');
+  var $bpEditImgs = document.getElementById('bp-edit-imgs');
+  var $bpEditImgInput = document.getElementById('bp-edit-img-input');
   var $bpPub = document.getElementById('bp-pub');
   var $bpPubInfo = document.getElementById('bp-pub-info');
   var $bpPubTitle = document.getElementById('bp-pub-title');
@@ -1740,6 +1774,7 @@
         : (/\.pdf$/i.test(name) ? 'application/pdf' : 'text/markdown'),
       size: isFinite(Number(raw.size)) ? Number(raw.size) : 0,
       storedAs: typeof raw.storedAs === 'string' ? raw.storedAs : '',
+      local: raw.local === true,
       createdAt: isFinite(Number(raw.createdAt)) ? Number(raw.createdAt) : Date.now()
     };
   }
@@ -2667,6 +2702,189 @@
     }
   }
 
+  /* ---------------- 本地笔记文件夹（File System Access API） ---------------- */
+  var localDir = null;
+  var LOCAL_IDB_NAME = 'study-tree-local';
+  var LOCAL_IDB_STORE = 'handles';
+
+  var $localNoteState = document.getElementById('local-note-state');
+  var $localPick = document.getElementById('local-pick');
+  var $localDisconnect = document.getElementById('local-disconnect');
+
+  function fsSupported() {
+    return typeof window.showDirectoryPicker === 'function';
+  }
+
+  function idbOpen() {
+    return new Promise(function (resolve, reject) {
+      var req = indexedDB.open(LOCAL_IDB_NAME, 1);
+      req.onupgradeneeded = function () {
+        if (!req.result.objectStoreNames.contains(LOCAL_IDB_STORE)) {
+          req.result.createObjectStore(LOCAL_IDB_STORE);
+        }
+      };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+
+  function idbGet(key) {
+    return idbOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(LOCAL_IDB_STORE, 'readonly');
+        var req = tx.objectStore(LOCAL_IDB_STORE).get(key);
+        req.onsuccess = function () { resolve(req.result || null); };
+        req.onerror = function () { reject(req.error); };
+      });
+    });
+  }
+
+  function idbSet(key, val) {
+    return idbOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(LOCAL_IDB_STORE, 'readwrite');
+        tx.objectStore(LOCAL_IDB_STORE).put(val, key);
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { reject(tx.error); };
+      });
+    });
+  }
+
+  function idbDel(key) {
+    return idbOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(LOCAL_IDB_STORE, 'readwrite');
+        tx.objectStore(LOCAL_IDB_STORE).delete(key);
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { reject(tx.error); };
+      });
+    });
+  }
+
+  function renderLocalNoteState() {
+    if (!$localNoteState) return;
+    var on = !!localDir;
+    if (!fsSupported()) {
+      $localNoteState.textContent = '当前浏览器不支持本地文件夹（请用 Chrome / Edge）';
+      $localNoteState.setAttribute('data-on', '0');
+      $localPick.hidden = true;
+      $localDisconnect.hidden = true;
+      return;
+    }
+    $localNoteState.textContent = on
+      ? '已连接「' + localDir.name + '」：新上传的笔记直接存到这个文件夹，服务器只记文件名'
+      : '未连接：笔记会上传到服务器 data/notes/。选一个本地文件夹后就不占服务器空间了';
+    $localNoteState.setAttribute('data-on', on ? '1' : '0');
+    $localPick.hidden = false;
+    $localPick.textContent = on ? '更换文件夹' : '选择本地文件夹';
+    $localDisconnect.hidden = !on;
+  }
+
+  function ensureLocalPermission(interactive) {
+    if (!localDir) return Promise.resolve(false);
+    var opts = { mode: 'readwrite' };
+    return localDir.queryPermission(opts).then(function (perm) {
+      if (perm === 'granted') return true;
+      if (!interactive) return false;
+      return localDir.requestPermission(opts).then(function (p) { return p === 'granted'; });
+    }).catch(function () { return false; });
+  }
+
+  function pickLocalDir() {
+    if (!fsSupported()) { toast('当前浏览器不支持本地文件夹，请用 Chrome / Edge', true); return; }
+    window.showDirectoryPicker({ id: 'study-tree-notes', mode: 'readwrite', startIn: 'documents' })
+      .then(function (dir) {
+        localDir = dir;
+        return idbSet('notesDir', dir).then(function () {
+          renderLocalNoteState();
+          toast('已连接本地文件夹：' + dir.name);
+        });
+      })
+      .catch(function (e) {
+        if (e && (e.name === 'AbortError' || e.name === 'NotAllowedError')) return;
+        toast('选择文件夹失败：' + ((e && e.message) || e), true);
+      });
+  }
+
+  function disconnectLocalDir() {
+    localDir = null;
+    idbDel('notesDir').catch(function () {});
+    renderLocalNoteState();
+    toast('已断开本地文件夹，之后的笔记会存到服务器');
+  }
+
+  function restoreLocalDir() {
+    if (!fsSupported()) { renderLocalNoteState(); return; }
+    idbGet('notesDir').then(function (h) {
+      if (h && h.kind === 'directory') localDir = h;
+      renderLocalNoteState();
+    }).catch(function () { renderLocalNoteState(); });
+  }
+
+  function localExists(name) {
+    return localDir.getFileHandle(name).then(function () { return true; }).catch(function () { return false; });
+  }
+
+  function uniqueLocalName(name) {
+    var ext = (name.match(/\.[^.]+$/) || [''])[0];
+    var base = ext ? name.slice(0, -ext.length) : name;
+    var cur = name, i = 2;
+    function loop() {
+      return localExists(cur).then(function (yes) {
+        if (!yes || i > 300) return cur;
+        cur = base + ' (' + i + ')' + ext;
+        i++;
+        return loop();
+      });
+    }
+    return loop();
+  }
+
+  function writeLocalFile(file) {
+    return ensureLocalPermission(true).then(function (ok) {
+      if (!ok) throw new Error('没有本地文件夹写入权限');
+      return uniqueLocalName(file.name);
+    }).then(function (name) {
+      return localDir.getFileHandle(name, { create: true }).then(function (fh) {
+        return fh.createWritable().then(function (w) {
+          return w.write(file).then(function () { return w.close(); }).then(function () { return name; });
+        });
+      });
+    });
+  }
+
+  function readLocalFile(name) {
+    return ensureLocalPermission(true).then(function (ok) {
+      if (!ok) throw new Error('没有本地文件夹读取权限');
+      return localDir.getFileHandle(name).then(function (fh) { return fh.getFile(); });
+    });
+  }
+
+  function writeLocalText(name, text) {
+    return ensureLocalPermission(true).then(function (ok) {
+      if (!ok) throw new Error('没有本地文件夹写入权限');
+      return localDir.getFileHandle(name, { create: true }).then(function (fh) {
+        return fh.createWritable().then(function (w) {
+          return w.write(text).then(function () { return w.close(); });
+        });
+      });
+    });
+  }
+
+  function removeLocalFile(name) {
+    return ensureLocalPermission(true).then(function (ok) {
+      if (!ok) return;
+      return localDir.removeEntry(name).catch(function () {});
+    });
+  }
+
+  $localPick.addEventListener('click', pickLocalDir);
+  $localDisconnect.addEventListener('click', function () {
+    askConfirm('断开本地文件夹？', '已经存在本地的笔记文件不会被删除，只是之后新上传的笔记会改存服务器。', '断开')
+      .then(function (yes) { if (yes) disconnectLocalDir(); });
+  });
+  restoreLocalDir();
+
   /* ---------------- 笔记文件（存在 data/notes/） ---------------- */
   function noteUrl(storedAs) {
     return API.notes + '/' + encodeURIComponent(storedAs);
@@ -2696,14 +2914,18 @@
       if (f.id === id) { target = f; return false; }
       return true;
     });
-    if (target && target.storedAs) {
-      fetch(noteUrl(target.storedAs), { method: 'DELETE' }).catch(function () {});
+    if (target) {
+      if (target.local) removeLocalFile(target.name).catch(function () {});
+      else if (target.storedAs) fetch(noteUrl(target.storedAs), { method: 'DELETE' }).catch(function () {});
     }
     saveNow();
     return Promise.resolve();
   }
 
   function fetchNoteText(rec) {
+    if (rec.local) {
+      return readLocalFile(rec.name).then(function (f) { return f.text(); });
+    }
     return fetch(noteUrl(rec.storedAs), { cache: 'no-store' }).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.text();
@@ -3061,7 +3283,7 @@
 
       var main = el('div', 'file-main');
       main.appendChild(el('div', 'file-name', f.name));
-      main.appendChild(el('div', 'file-size', fmtSize(f.size)));
+      main.appendChild(el('div', 'file-size', fmtSize(f.size) + (f.local ? ' · 本地文件' : '')));
 
       var acts = el('div', 'file-act');
       var openBtn = el('button', '', '阅读');
@@ -3091,11 +3313,19 @@
   /* ---------------- 阅读器 ---------------- */
   var readerFile = null;
   var readerEditing = false;
+  var readerBlobUrl = '';
+
+  function releaseReaderBlob() {
+    if (readerBlobUrl) {
+      try { URL.revokeObjectURL(readerBlobUrl); } catch (e) {}
+      readerBlobUrl = '';
+    }
+  }
 
   function openFile(id, editing) {
     getFile(id).then(function (rec) {
       if (!rec) { toast('文件已不存在', true); return; }
-      if (!rec.storedAs) {
+      if (!rec.local && !rec.storedAs) {
         toast('这个附件在本机找不到文件了，请重新上传一次', true);
         return;
       }
@@ -3105,33 +3335,51 @@
       $readerName.textContent = rec.name;
       $readerBody.textContent = '';
       $readerDownload.hidden = false;
+      releaseReaderBlob();
 
       var kind = fileKind(rec.name);
 
+      function localSrc() {
+        return readLocalFile(rec.name).then(function (f) {
+          readerBlobUrl = URL.createObjectURL(f);
+          return readerBlobUrl;
+        });
+      }
+
       if (kind === 'pdf') {
-        var frame = document.createElement('iframe');
-        frame.src = noteUrl(rec.storedAs);
-        frame.title = rec.name;
-        $readerBody.appendChild(frame);
         $readerEdit.hidden = true;
         $readerSave.hidden = true;
+        (rec.local ? localSrc() : Promise.resolve(noteUrl(rec.storedAs))).then(function (src) {
+          var frame = document.createElement('iframe');
+          frame.src = src;
+          frame.title = rec.name;
+          $readerBody.textContent = '';
+          $readerBody.appendChild(frame);
+        }).catch(function (e) {
+          toast('读取本地文件失败：' + (e.message || e), true);
+        });
         return;
       }
 
       if (kind === 'image') {
-        var img = document.createElement('img');
-        img.className = 'reader-img';
-        img.src = noteUrl(rec.storedAs);
-        img.alt = rec.name;
-        $readerBody.appendChild(img);
         $readerEdit.hidden = true;
         $readerSave.hidden = true;
+        (rec.local ? localSrc() : Promise.resolve(noteUrl(rec.storedAs))).then(function (src) {
+          var img = document.createElement('img');
+          img.className = 'reader-img';
+          img.src = src;
+          img.alt = rec.name;
+          $readerBody.textContent = '';
+          $readerBody.appendChild(img);
+        }).catch(function (e) {
+          toast('读取本地文件失败：' + (e.message || e), true);
+        });
         return;
       }
 
       if (kind === 'doc' || kind === 'ppt' || kind === 'other') {
         var box = el('div', 'reader-unavail');
-        box.appendChild(el('p', '', '这个文件已经安全保存，可以下载、也可以随蓝图一起分享。'));
+        box.appendChild(el('p', '', '这个文件已经安全保存，可以随时下载查看。'));
         box.appendChild(el('p', '', '但浏览器无法直接打开 Word / PowerPoint 这类 Office 文档，'));
         box.appendChild(el('p', '', '请点右上角「下载」，用本机 Word / PowerPoint / WPS 打开查看或编辑。'));
         box.appendChild(el('p', 'unavail-tip', '想直接在网页里编辑，请改用 .md 格式的笔记。'));
@@ -3147,7 +3395,7 @@
         if (editing) startEditing(text);
         else renderMd(text);
       }).catch(function () {
-        toast('读取失败：data/notes 里找不到这个文件了', true);
+        toast('读取失败：' + (rec.local ? '本地文件夹' : 'data/notes') + ' 里找不到这个文件了', true);
       });
     });
   }
@@ -3179,10 +3427,25 @@
 
   function saveEditing() {
     var ta = $readerBody.querySelector('textarea');
-    if (!ta || !readerFile || !readerFile.storedAs) return;
+    if (!ta || !readerFile) return;
     var text = ta.value;
     var rec = readerFile;
 
+    if (rec.local) {
+      writeLocalText(rec.name, text).then(function () {
+        rec.size = new Blob([text]).size;
+        renderMd(text);
+        renderFiles();
+        refreshBadges();
+        refreshDataPanel();
+        toast('已写回本地文件：' + rec.name);
+      }).catch(function (e) {
+        toast('保存失败：' + (e.message || e), true);
+      });
+      return;
+    }
+
+    if (!rec.storedAs) return;
     fetch(noteUrl(rec.storedAs), {
       method: 'PUT',
       headers: { 'Content-Type': 'text/markdown; charset=utf-8' },
@@ -3203,6 +3466,7 @@
   function closeReader() {
     $reader.hidden = true;
     $readerBody.textContent = '';
+    releaseReaderBlob();
     readerFile = null;
     readerEditing = false;
   }
@@ -3759,6 +4023,25 @@
         }
         if (!f.size) { toast('「' + f.name + '」是空文件，已跳过', true); return; }
 
+        // 已连接本地文件夹：直接写进用户的文件夹，服务器不存文件内容
+        if (localDir) {
+          return writeLocalFile(f).then(function (savedName) {
+            var rec = normalizeFile({
+              id: makeId(),
+              nodeId: nodeId,
+              name: savedName,
+              mime: f.type || 'application/octet-stream',
+              size: f.size,
+              storedAs: '',
+              local: true,
+              createdAt: Date.now()
+            });
+            if (rec) { state.files.push(rec); added.push(rec); }
+          }).catch(function (e) {
+            toast('「' + f.name + '」写入本地失败：' + (e.message || '未知错误'), true);
+          });
+        }
+
         return fetch(API.notes + '?nodeId=' + encodeURIComponent(nodeId) + '&name=' + encodeURIComponent(f.name), {
           method: 'POST',
           headers: { 'Content-Type': f.type || 'application/octet-stream' },
@@ -3785,7 +4068,9 @@
       if (currentId === nodeId) loadFiles(nodeId);
       refreshBadges();
       refreshDataPanel();
-      toast('已存入 data/notes/：' + added.length + ' 个笔记');
+      toast(localDir
+        ? ('已存进本地文件夹：' + added.length + ' 个笔记')
+        : ('已存入 data/notes/：' + added.length + ' 个笔记'));
     });
   });
 
@@ -3820,7 +4105,23 @@
   });
   $readerSave.addEventListener('click', saveEditing);
   $readerDownload.addEventListener('click', function () {
-    if (!readerFile || !readerFile.storedAs) return;
+    if (!readerFile) return;
+    if (readerFile.local) {
+      readLocalFile(readerFile.name).then(function (f) {
+        var a = document.createElement('a');
+        var u = URL.createObjectURL(f);
+        a.href = u;
+        a.download = readerFile.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(u); }, 2000);
+      }).catch(function (e) {
+        toast('读取本地文件失败：' + (e.message || e), true);
+      });
+      return;
+    }
+    if (!readerFile.storedAs) return;
     var a = document.createElement('a');
     a.href = noteUrl(readerFile.storedAs);
     a.download = readerFile.name;
@@ -5224,6 +5525,95 @@
   var bpCat = '';
   var bpQuery = '';
   var bpEditId = '';
+  var bpPubImages = [];
+  var bpEditImages = [];
+
+  function readImageAsDataUrl(file, maxDim) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        var img = new Image();
+        img.onload = function () {
+          var w = img.width, h = img.height;
+          var scale = Math.min(1, (maxDim || 1280) / Math.max(w, h));
+          w = Math.max(1, Math.round(w * scale));
+          h = Math.max(1, Math.round(h * scale));
+          var canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          var out = canvas.toDataURL('image/jpeg', 0.82);
+          if (out.length > 2.6 * 1024 * 1024) out = canvas.toDataURL('image/jpeg', 0.55);
+          resolve(out);
+        };
+        img.onerror = function () { reject(new Error('图片解码失败')); };
+        img.src = reader.result;
+      };
+      reader.onerror = function () { reject(new Error('图片读取失败')); };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function renderBpImages(box, images, bpId) {
+    if (!box) return;
+    box.textContent = '';
+    images.forEach(function (img, i) {
+      var item = el('div', 'bp-img-item');
+      var im = document.createElement('img');
+      im.src = img.data || ('/api/blueprints/' + encodeURIComponent(bpId) + '/images/' + encodeURIComponent(img.id));
+      im.alt = img.name || '';
+      item.appendChild(im);
+      var del = el('button', 'bp-img-del', '×');
+      del.type = 'button';
+      del.setAttribute('data-img-del', String(i));
+      del.title = '移除这张图';
+      item.appendChild(del);
+      box.appendChild(item);
+    });
+  }
+
+  function addImagesTo(files, target, box, bpId) {
+    var list = Array.prototype.slice.call(files || []).slice(0, Math.max(0, 3 - target.length));
+    if (!list.length) { toast('最多 3 张配图', true); return Promise.resolve(); }
+    var chain = Promise.resolve();
+    list.forEach(function (f) {
+      chain = chain.then(function () {
+        if (!/^image\//.test(f.type) && !/\.(png|jpe?g|gif|webp|bmp)$/i.test(f.name)) {
+          toast('「' + f.name + '」不是图片', true);
+          return;
+        }
+        return readImageAsDataUrl(f).then(function (data) {
+          target.push({ name: f.name, data: data });
+        }).catch(function (e) {
+          toast('「' + f.name + '」处理失败：' + (e.message || e), true);
+        });
+      });
+    });
+    return chain.then(function () { renderBpImages(box, target, bpId); });
+  }
+
+  $bpPubImgInput.addEventListener('change', function () {
+    var files = $bpPubImgInput.files;
+    $bpPubImgInput.value = '';
+    addImagesTo(files, bpPubImages, $bpPubImgs, '');
+  });
+  $bpEditImgInput.addEventListener('change', function () {
+    var files = $bpEditImgInput.files;
+    $bpEditImgInput.value = '';
+    addImagesTo(files, bpEditImages, $bpEditImgs, bpEditId);
+  });
+  $bpPubImgs.addEventListener('click', function (e) {
+    var d = e.target && e.target.closest ? e.target.closest('[data-img-del]') : null;
+    if (!d) return;
+    bpPubImages.splice(Number(d.getAttribute('data-img-del')), 1);
+    renderBpImages($bpPubImgs, bpPubImages, '');
+  });
+  $bpEditImgs.addEventListener('click', function (e) {
+    var d = e.target && e.target.closest ? e.target.closest('[data-img-del]') : null;
+    if (!d) return;
+    bpEditImages.splice(Number(d.getAttribute('data-img-del')), 1);
+    renderBpImages($bpEditImgs, bpEditImages, bpEditId);
+  });
 
   function bpCatName(id) {
     for (var i = 0; i < BP_CATS.length; i++) if (BP_CATS[i].id === id) return BP_CATS[i].name;
@@ -5307,6 +5697,14 @@
 
     list.forEach(function (bp) {
       var item = el('div', 'bp-item');
+      if (bp.cover) {
+        var cov = document.createElement('img');
+        cov.className = 'bp-cover';
+        cov.src = bp.cover;
+        cov.alt = '';
+        cov.loading = 'lazy';
+        item.appendChild(cov);
+      }
       var main = el('div', 'bp-main');
 
       var titleRow = el('div', 'bp-title-row');
@@ -5442,6 +5840,20 @@
       .then(function (res) {
         if (!res || !res.blueprint) throw new Error('读取失败');
         renderBpNodes(box, res.blueprint.nodes);
+        if (res.blueprint.images && res.blueprint.images.length) {
+          var wrap = el('div', 'bp-imgs');
+          wrap.style.marginTop = '8px';
+          res.blueprint.images.forEach(function (img) {
+            var cell = el('div', 'bp-img-item');
+            var im = document.createElement('img');
+            im.src = '/api/blueprints/' + encodeURIComponent(id) + '/images/' + encodeURIComponent(img.id);
+            im.alt = img.name || '';
+            im.loading = 'lazy';
+            cell.appendChild(im);
+            wrap.appendChild(cell);
+          });
+          box.appendChild(wrap);
+        }
         box.setAttribute('data-loaded', '1');
         box.hidden = false;
         btn.textContent = '收起内容';
@@ -5468,6 +5880,8 @@
         $bpEditNote.value = bp.note || '';
         $bpEditCat.value = bp.category;
         $bpEditVis.value = bp.visibility || 'public';
+        bpEditImages = (bp.images || []).map(function (x) { return { id: x.id, name: x.name }; });
+        renderBpImages($bpEditImgs, bpEditImages, bpEditId);
         $bpEditMeta.textContent = bp.nodes.length + ' 个节点 · ' + bp.files.length +
           ' 个文件 · 评分 ' + (typeof bp.score === 'number' ? bp.score : '—') +
           ' · 更新于 ' + fmtTime(bp.updatedAt);
@@ -5570,7 +5984,7 @@
     fetch('/api/blueprints/' + encodeURIComponent(bpEditId), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: title, note: $bpEditNote.value.trim(), category: $bpEditCat.value, visibility: $bpEditVis.value })
+      body: JSON.stringify({ title: title, note: $bpEditNote.value.trim(), category: $bpEditCat.value, visibility: $bpEditVis.value, images: bpEditImages })
     }).then(function (r) {
       return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || '保存失败'); return j; });
     }).then(function () {
@@ -5645,6 +6059,8 @@
     $bpPubNote.value = '';
     $bpPubCat.value = guessBpCat(node.categoryId);
     $bpPubVis.value = 'public';
+    bpPubImages = [];
+    renderBpImages($bpPubImgs, bpPubImages, '');
     $bpPub.hidden = false;
   }
 
@@ -5663,7 +6079,8 @@
         title: $bpPubTitle.value.trim(),
         note: $bpPubNote.value.trim(),
         category: $bpPubCat.value,
-        visibility: $bpPubVis.value
+        visibility: $bpPubVis.value,
+        images: bpPubImages
       })
     }).then(function (r) {
       return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || '失败'); return j; });
