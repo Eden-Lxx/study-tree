@@ -4,4 +4,6 @@ data
 node_modules
 .git
 *.md
+!使用说明.md
+!README.md
 *.bat

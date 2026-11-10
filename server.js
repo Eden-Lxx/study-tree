@@ -1760,6 +1760,22 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    /* 使用说明：存在服务器里，前端点击后渲染 */
+    if (url.pathname === '/api/doc' && req.method === 'GET') {
+      let text = '';
+      for (const name of ['使用说明.md', 'README.md']) {
+        try {
+          text = await fsp.readFile(path.join(ROOT, name), 'utf8');
+          if (text) break;
+        } catch (e) { /* 试下一个 */ }
+      }
+      return sendJson(res, 200, {
+        ok: true,
+        title: '使用说明',
+        markdown: text || '# 使用说明\n\n文档还没准备好。'
+      });
+    }
+
     if (url.pathname.startsWith('/api/auth/')) return await handleAuth(req, res, url);
 
     if (url.pathname.startsWith('/api/')) {

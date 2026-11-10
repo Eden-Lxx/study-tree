@@ -299,6 +299,8 @@
     border:1px dashed rgba(56,189,248,.35);cursor:pointer;
   }
   .upload-row label:hover{background:rgba(56,189,248,.14)}
+  .upload-row label.is-disabled{opacity:.42;cursor:not-allowed;border-style:dashed}
+  .upload-row label.is-disabled:hover{background:rgba(122,152,200,.06)}
   .local-note{margin-top:10px;padding:8px 10px;border-radius:8px;background:rgba(8,14,24,.42);border:1px solid rgba(122,152,200,.1)}
   .local-note-state{font-size:11px;color:#6b7d99;line-height:1.5;margin-bottom:6px}
   .local-note-state[data-on="1"]{color:#7fe3c4}
@@ -918,6 +920,7 @@
         <strong id="points">10</strong>
       </div>
       <button class="btn-io" id="btn-timer" type="button" title="课表 / 日常规划 / 科技点转化"><b>◷</b>时间</button>
+      <button class="btn-io" id="btn-doc" type="button" title="使用说明"><b>?</b>说明</button>
       <button class="btn-io" id="btn-bp" type="button" title="蓝图市场 / 我的蓝图库"><b>◈</b>蓝图</button>
       <button class="btn-io" id="btn-export" type="button" title="把整棵学习树导出成一个文件"><b>↓</b>导出</button>
       <button class="btn-io" id="btn-import" type="button" title="导入别人的学习树文件"><b>↑</b>导入</button>
@@ -1109,7 +1112,7 @@
       <ul class="file-list" id="file-list"></ul>
       <p class="empty-files" id="empty-files">支持 .md / .pdf / .doc / .docx / .ppt / .pptx / 图片</p>
       <div class="upload-row">
-        <label for="file-input">＋ 上传笔记或图片</label>
+        <label for="file-input" id="upload-label">＋ 上传笔记或图片</label>
         <input id="file-input" type="file" accept=".md,.markdown,.pdf,.txt,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.bmp" multiple hidden>
       </div>
       <div class="local-note">
@@ -1335,6 +1338,16 @@
         <button class="btn-primary" id="tp-add" type="button">添加</button>
       </div>
     </div>
+  </div>
+</div>
+
+<div class="modal" id="doc-modal" hidden>
+  <div class="modal-box" style="max-width:780px">
+    <div class="admin-head">
+      <h3>使用说明</h3>
+      <button class="icon-btn" id="doc-close" type="button" aria-label="关闭">×</button>
+    </div>
+    <div class="doc-body md" id="doc-body" style="max-height:72vh;overflow:auto"></div>
   </div>
 </div>
 
@@ -1670,6 +1683,8 @@
   var $bpPubTitle = document.getElementById('bp-pub-title');
   var $bpPubNote = document.getElementById('bp-pub-note');
   var $btnTimer = document.getElementById('btn-timer');
+  var $docModal = document.getElementById('doc-modal');
+  var $docBody = document.getElementById('doc-body');
   var $timerModal = document.getElementById('timer-modal');
   var $timerHero = document.getElementById('timer-hero');
   var $timerSub = document.getElementById('timer-sub');
@@ -2789,6 +2804,7 @@
   var $localNoteState = document.getElementById('local-note-state');
   var $localPick = document.getElementById('local-pick');
   var $localDisconnect = document.getElementById('local-disconnect');
+  var $uploadLabel = document.getElementById('upload-label');
 
   function fsSupported() {
     return typeof window.showDirectoryPicker === 'function';
@@ -2844,19 +2860,28 @@
     if (!$localNoteState) return;
     var on = !!localDir;
     if (!fsSupported()) {
-      $localNoteState.textContent = '当前浏览器不支持本地文件夹（请用 Chrome / Edge）';
+      $localNoteState.textContent = '当前浏览器不支持本地文件夹（请用 Chrome / Edge），暂时不能上传笔记';
       $localNoteState.setAttribute('data-on', '0');
       $localPick.hidden = true;
       $localDisconnect.hidden = true;
+      if ($uploadLabel) {
+        $uploadLabel.classList.add('is-disabled');
+        $uploadLabel.textContent = '＋ 上传笔记（浏览器不支持）';
+      }
       return;
     }
     $localNoteState.textContent = on
-      ? '已连接「' + localDir.name + '」：新上传的笔记直接存到这个文件夹，服务器只记文件名'
-      : '未连接：笔记会上传到服务器 data/notes/。选一个本地文件夹后就不占服务器空间了';
+      ? '已连接「' + localDir.name + '」：上传的笔记直接存到这个文件夹，服务器只记文件名'
+      : '未连接：上传前请先选择一个本地文件夹（笔记不会存到服务器）';
     $localNoteState.setAttribute('data-on', on ? '1' : '0');
     $localPick.hidden = false;
     $localPick.textContent = on ? '更换文件夹' : '选择本地文件夹';
+    $localPick.className = on ? 'btn-ghost mini' : 'btn-primary mini';
     $localDisconnect.hidden = !on;
+    if ($uploadLabel) {
+      $uploadLabel.classList.toggle('is-disabled', !on);
+      $uploadLabel.textContent = on ? '＋ 上传笔记或图片' : '＋ 上传笔记（需先选择本地文件夹）';
+    }
   }
 
   function ensureLocalPermission(interactive) {
@@ -2889,7 +2914,7 @@
     localDir = null;
     idbDel('notesDir').catch(function () {});
     renderLocalNoteState();
-    toast('已断开本地文件夹，之后的笔记会存到服务器');
+    toast('已断开本地文件夹，重新选择后才能继续上传笔记');
   }
 
   function restoreLocalDir() {
@@ -2959,9 +2984,18 @@
 
   $localPick.addEventListener('click', pickLocalDir);
   $localDisconnect.addEventListener('click', function () {
-    askConfirm('断开本地文件夹？', '已经存在本地的笔记文件不会被删除，只是之后新上传的笔记会改存服务器。', '断开')
+    askConfirm('断开本地文件夹？', '本地已存在的笔记文件不会被删除，但断开后需要重新选择文件夹才能继续上传。', '断开')
       .then(function (yes) { if (yes) disconnectLocalDir(); });
   });
+  if ($uploadLabel) {
+    $uploadLabel.addEventListener('click', function (e) {
+      if (readOnly) { e.preventDefault(); toast('访客模式不能上传笔记', true); return; }
+      if (!localDir) {
+        e.preventDefault();
+        toast('请先选一个本地文件夹，笔记只存在你电脑上', true);
+      }
+    });
+  }
   restoreLocalDir();
 
   /* ---------------- 笔记文件（存在 data/notes/） ---------------- */
@@ -4199,6 +4233,12 @@
     $fileInput.value = '';
     if (!picked.length || !currentId) return;
 
+    if (readOnly) { toast('访客模式不能上传笔记', true); return; }
+    if (!localDir) {
+      toast('请先选一个本地文件夹，笔记只存在你电脑上', true);
+      return;
+    }
+
     var nodeId = currentId;
     var chain = Promise.resolve();
     var added = [];
@@ -4577,12 +4617,14 @@
     }).then(function (res) {
       $authGo.disabled = false;
       $authPass.value = '';
+      var wasRegister = authMode === 'register';
       setAuthMode(authMode);
       $auth.hidden = true;
       currentUser = res.user;
       setTopbarIdentity(currentUser);
       loadTree();
       if (res.migrated) toast('已把原来的 ' + res.migrated + ' 个节点迁移到你的账号');
+      if (wasRegister) setTimeout(openDoc, 700);
     }).catch(function (e) {
       $authGo.disabled = false;
       setAuthMode(authMode);
@@ -5849,6 +5891,28 @@
       syncPoints(); saveNow(); render();
     }
   });
+
+  /* ---------------- 使用说明（文档存在服务器 /api/doc） ---------------- */
+  var docLoaded = false;
+
+  function openDoc() {
+    if (!$docModal) return;
+    $docModal.hidden = false;
+    if (docLoaded) return;
+    $docBody.textContent = '加载中…';
+    fetch('/api/doc', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        $docBody.innerHTML = mdToHtml(res.markdown || '暂时没有说明文档');
+        docLoaded = true;
+      })
+      .catch(function () {
+        $docBody.textContent = '读取说明失败，请检查服务是否在运行';
+      });
+  }
+
+  document.getElementById('btn-doc').addEventListener('click', openDoc);
+  document.getElementById('doc-close').addEventListener('click', function () { $docModal.hidden = true; });
 
   /* ---------------- 蓝图：市场 / 我的蓝图库 ---------------- */
   var BP_CATS = [

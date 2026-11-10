@@ -3,7 +3,8 @@
 FROM node:20-alpine
 
 WORKDIR /app
-COPY server.js index.html ./
+COPY server.js index.html package.json ./
+COPY 使用说明.md README.md ./
 
 # 容器内必须监听 0.0.0.0，对外只通过 compose 映射到 127.0.0.1 或由 Nginx 反代
 ENV PORT=8080
