@@ -728,6 +728,7 @@
   .bp-img-del{position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;border:0;background:rgba(0,0,0,.6);color:#fff;font-size:12px;line-height:1;cursor:pointer;padding:0}
   .bp-img-add{display:inline-block;cursor:pointer;font-size:11px;padding:4px 9px;border-radius:6px}
   .bp-cover{width:100%;max-height:130px;object-fit:cover;border-radius:8px;margin-bottom:8px;display:block}
+  .sec-sub{font-size:10.5px;color:#5d7090;font-weight:400;margin-left:6px}
   /* ---------- 时间规划 ---------- */
   .timer-hero{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:6px}
   .timer-sub{font-family:var(--mono);font-size:11px;color:#6b7d99;margin:0 0 12px}
@@ -1063,6 +1064,13 @@
       <textarea id="edit-note" placeholder="记点什么：学了什么、卡在哪、下次继续…"></textarea>
       <div class="save-state" id="save-state"></div>
 
+      <div class="section-title">描述照片 <span class="sec-sub">最多 3 张</span></div>
+      <div class="bp-imgs" id="node-photos"></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+        <label class="btn-ghost mini bp-img-add" for="node-photo-input">＋ 添加照片</label>
+        <input id="node-photo-input" type="file" accept="image/*" multiple hidden>
+      </div>
+
       <div class="divider"></div>
 
       <div class="section-title">
@@ -1264,18 +1272,10 @@
       <div class="timer-list" id="timer-courses"></div>
       <div class="timer-add">
         <input id="tc-title" type="text" maxlength="30" placeholder="课程名">
-        <select id="tc-day">
-          <option value="1">周一</option>
-          <option value="2">周二</option>
-          <option value="3">周三</option>
-          <option value="4">周四</option>
-          <option value="5">周五</option>
-          <option value="6">周六</option>
-          <option value="7">周日</option>
-        </select>
         <input id="tc-start" type="time" value="08:00">
         <span class="timer-dash">–</span>
         <input id="tc-end" type="time" value="09:40">
+        <div class="tp-days" id="tc-days"></div>
         <button class="btn-primary" id="tc-add" type="button">添加</button>
       </div>
     </div>
@@ -1492,6 +1492,7 @@
   var API = {
     tree: '/api/tree',
     notes: '/api/notes',
+    photos: '/api/photos',
     status: '/api/status',
     exportDoc: '/api/export',
     importDoc: '/api/import',
@@ -1530,6 +1531,8 @@
   var $editCostHint = document.getElementById('edit-cost-hint');
   var $editState = document.getElementById('edit-state');
   var $editNote = document.getElementById('edit-note');
+  var $nodePhotos = document.getElementById('node-photos');
+  var $nodePhotoInput = document.getElementById('node-photo-input');
   var $saveState = document.getElementById('save-state');
   var $fileList = document.getElementById('file-list');
   var $fileCount = document.getElementById('file-count');
@@ -1632,9 +1635,9 @@
   var $timerCourses = document.getElementById('timer-courses');
   var $timerPlans = document.getElementById('timer-plans');
   var $tcTitle = document.getElementById('tc-title');
-  var $tcDay = document.getElementById('tc-day');
   var $tcStart = document.getElementById('tc-start');
   var $tcEnd = document.getElementById('tc-end');
+  var $tcDays = document.getElementById('tc-days');
   var $tpTitle = document.getElementById('tp-title');
   var $tpStart = document.getElementById('tp-start');
   var $tpEnd = document.getElementById('tp-end');
@@ -1762,7 +1765,21 @@
       categoryId: typeof raw.categoryId === 'string' && raw.categoryId ? raw.categoryId : null,
       ox: isFinite(Number(raw.ox)) ? Math.round(Number(raw.ox)) : 0,
       oy: isFinite(Number(raw.oy)) ? Math.round(Number(raw.oy)) : 0,
-      note: typeof raw.note === 'string' ? raw.note : ''
+      note: typeof raw.note === 'string' ? raw.note : '',
+      photos: (Array.isArray(raw.photos) ? raw.photos : []).slice(0, 3).map(function (p) {
+        if (!p || typeof p !== 'object') return null;
+        var nm = typeof p.name === 'string' ? p.name.trim() : '';
+        var sa = typeof p.storedAs === 'string' ? p.storedAs : '';
+        if (!nm || !sa) return null;
+        return {
+          id: typeof p.id === 'string' && p.id ? p.id : makeId(),
+          name: nm,
+          mime: typeof p.mime === 'string' && p.mime ? p.mime : 'image/png',
+          size: isFinite(Number(p.size)) ? Number(p.size) : 0,
+          storedAs: sa,
+          createdAt: isFinite(Number(p.createdAt)) ? Number(p.createdAt) : Date.now()
+        };
+      }).filter(Boolean)
     };
   }
 
@@ -1800,10 +1817,10 @@
   }
 
   function hhmmToMin(s) {
-    var m = /^(\d{1,2}):(\d{2})$/.exec(String(s || ''));
+    var m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(String(s || ''));
     if (!m) return NaN;
-    var h = Number(m[1]), mi = Number(m[2]);
-    if (h < 0 || h > 23 || mi < 0 || mi > 59) return NaN;
+    var h = Number(m[1]), mi = Number(m[2]), se = Number(m[3] || 0);
+    if (h < 0 || h > 23 || mi < 0 || mi > 59 || se < 0 || se > 59) return NaN;
     return h * 60 + mi;
   }
 
@@ -3098,6 +3115,9 @@
       if (isGroup) childrenOf(id).forEach(function (k) { k.parentId = null; });
 
       state.abilities = state.abilities.filter(function (a) { return a.id !== id; });
+      (node.photos || []).forEach(function (p) {
+        if (p.storedAs) fetch(API.photos + '/' + encodeURIComponent(p.storedAs), { method: 'DELETE' }).catch(function () {});
+      });
       var goneFiles = state.files.filter(function (f) { return f.nodeId === id; });
       state.files = state.files.filter(function (f) { return f.nodeId !== id; });
       goneFiles.forEach(function (f) {
@@ -3207,7 +3227,104 @@
     $btnPublish.hidden = node.kind !== 'group';
 
     syncRelSelects();
+    renderNodePhotos();
   }
+
+  /* 节点描述照片 */
+  function renderNodePhotos() {
+    if (!$nodePhotos) return;
+    $nodePhotos.textContent = '';
+    var node = currentId ? findNode(currentId) : null;
+    var photos = (node && node.photos) || [];
+    photos.forEach(function (p) {
+      var item = el('div', 'bp-img-item');
+      var im = document.createElement('img');
+      im.src = API.photos + '/' + encodeURIComponent(p.storedAs);
+      im.alt = p.name;
+      im.title = '点击查看大图';
+      im.style.cursor = 'zoom-in';
+      im.addEventListener('click', function () { openPhotoPreview(p.name, im.src); });
+      item.appendChild(im);
+      var del = el('button', 'bp-img-del', '×');
+      del.type = 'button';
+      del.setAttribute('data-photo-del', p.id);
+      del.title = '删除这张照片';
+      item.appendChild(del);
+      $nodePhotos.appendChild(item);
+    });
+  }
+
+  function openPhotoPreview(name, url) {
+    releaseReaderBlob();
+    readerFile = null;
+    readerEditing = false;
+    $reader.hidden = false;
+    $readerName.textContent = name;
+    $readerBody.textContent = '';
+    var img = document.createElement('img');
+    img.className = 'reader-img';
+    img.src = url;
+    img.alt = name;
+    $readerBody.appendChild(img);
+    $readerEdit.hidden = true;
+    $readerSave.hidden = true;
+    $readerDownload.hidden = true;
+  }
+
+  $nodePhotoInput.addEventListener('change', function () {
+    var files = Array.prototype.slice.call($nodePhotoInput.files || []);
+    $nodePhotoInput.value = '';
+    if (!currentId || !files.length) return;
+    var node = findNode(currentId);
+    if (!node) return;
+    if (!node.photos) node.photos = [];
+    var room = 3 - node.photos.length;
+    if (room <= 0) { toast('最多 3 张照片，先删一张再传', true); return; }
+
+    var nodeId = currentId;
+    var chain = Promise.resolve();
+    files.slice(0, room).forEach(function (f) {
+      chain = chain.then(function () {
+        if (!/^image\//.test(f.type) && !/\.(png|jpe?g|gif|webp|bmp)$/i.test(f.name)) {
+          toast('「' + f.name + '」不是图片', true);
+          return;
+        }
+        return fetch(API.photos + '?nodeId=' + encodeURIComponent(nodeId) + '&name=' + encodeURIComponent(f.name), {
+          method: 'POST',
+          headers: { 'Content-Type': f.type || 'image/png' },
+          body: f
+        }).then(function (r) {
+          return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || '失败'); return j; });
+        }).then(function (res) {
+          if (res.photo) node.photos.push(res.photo);
+        }).catch(function (e) {
+          toast('「' + f.name + '」上传失败：' + (e.message || e), true);
+        });
+      });
+    });
+    chain.then(function () {
+      saveNow();
+      renderNodePhotos();
+      render();
+    });
+  });
+
+  $nodePhotos.addEventListener('click', function (e) {
+    var d = e.target && e.target.closest ? e.target.closest('[data-photo-del]') : null;
+    if (!d) return;
+    var pid = d.getAttribute('data-photo-del');
+    var node = currentId ? findNode(currentId) : null;
+    if (!node || !node.photos) return;
+    var target = null;
+    node.photos = node.photos.filter(function (p) {
+      if (p.id === pid) { target = p; return false; }
+      return true;
+    });
+    if (target) fetch(API.photos + '/' + encodeURIComponent(target.storedAs), { method: 'DELETE' }).catch(function () {});
+    saveNow();
+    renderNodePhotos();
+    render();
+  });
 
   function syncRelSelects() {
     var node = findNode(currentId);
@@ -3752,7 +3869,13 @@
   /* ---------------- 时间规划 → 科技点 ---------------- */
   function timerOf() {
     if (!state.timer || typeof state.timer !== 'object') state.timer = defaultTimer();
-    return state.timer;
+    var t = state.timer;
+    if (!Array.isArray(t.courses)) t.courses = [];
+    if (!Array.isArray(t.plans)) t.plans = [];
+    if (typeof t.rate !== 'number' || !isFinite(t.rate)) t.rate = 50;
+    if (typeof t.spent !== 'number' || !isFinite(t.spent)) t.spent = 0;
+    if (typeof t.bonus !== 'number' || !isFinite(t.bonus)) t.bonus = 0;
+    return t;
   }
 
   /* 本周一 00:00 的时间戳（周一为一周起点） */
@@ -5453,14 +5576,17 @@
       $timerPlans.appendChild(item);
     });
 
-    if ($tpDays && !$tpDays.childNodes.length) {
+    function ensureDayChips(box) {
+      if (!box || box.childNodes.length) return;
       for (var d2 = 1; d2 <= 7; d2++) {
         var btn = el('button', 'tp-day on', DAY_NAMES[d2].replace('周', ''));
         btn.type = 'button';
-        btn.setAttribute('data-tp-day', String(d2));
-        $tpDays.appendChild(btn);
+        btn.setAttribute('data-day-pick', String(d2));
+        box.appendChild(btn);
       }
     }
+    ensureDayChips($tcDays);
+    ensureDayChips($tpDays);
   }
 
   function openTimer() {
@@ -5483,12 +5609,26 @@
   document.getElementById('tc-add').addEventListener('click', function () {
     var title = $tcTitle.value.trim();
     if (!title) { toast('先写课程名', true); return; }
-    var day = Math.round(Number($tcDay.value));
     var s = hhmmToMin($tcStart.value), e = hhmmToMin($tcEnd.value);
     if (!isFinite(s) || !isFinite(e) || e <= s) { toast('结束时间要晚于开始时间', true); return; }
-    timerOf().courses.push({ id: makeId(), day: day, start: s, end: e, title: title.slice(0, 30) });
+    var days = [];
+    Array.prototype.forEach.call($tcDays.querySelectorAll('[data-day-pick]'), function (b) {
+      if (b.classList.contains('on')) days.push(Number(b.getAttribute('data-day-pick')));
+    });
+    if (!days.length) { toast('至少选一天', true); return; }
+
+    var inSlot = TIME_SLOTS.some(function (slot) {
+      return Math.min(e, slot[1]) > Math.max(s, slot[0]);
+    });
+    var t = timerOf();
+    days.forEach(function (d) {
+      t.courses.push({ id: makeId(), day: d, start: s, end: e, title: title.slice(0, 30) });
+    });
     $tcTitle.value = '';
     syncPoints(); saveNow(); render();
+    toast(inSlot
+      ? ('已加 ' + days.length + ' 天「' + title + '」')
+      : ('已加 ' + days.length + ' 天，但这段不在可安排时段（8-12 / 12-17 / 19-22）内，不影响空闲'));
   });
 
   document.getElementById('tp-add').addEventListener('click', function () {
@@ -5497,8 +5637,8 @@
     var s = hhmmToMin($tpStart.value), e = hhmmToMin($tpEnd.value);
     if (!isFinite(s) || !isFinite(e) || e <= s) { toast('结束时间要晚于开始时间', true); return; }
     var days = [];
-    Array.prototype.forEach.call($tpDays.querySelectorAll('[data-tp-day]'), function (b) {
-      if (b.classList.contains('on')) days.push(Number(b.getAttribute('data-tp-day')));
+    Array.prototype.forEach.call($tpDays.querySelectorAll('[data-day-pick]'), function (b) {
+      if (b.classList.contains('on')) days.push(Number(b.getAttribute('data-day-pick')));
     });
     if (!days.length) { toast('至少选一天', true); return; }
     timerOf().plans.push({ id: makeId(), days: days, start: s, end: e, title: title.slice(0, 30) });
@@ -5506,11 +5646,16 @@
     syncPoints(); saveNow(); render();
   });
 
-  $tpDays.addEventListener('click', function (e) {
-    var b = e.target && e.target.closest ? e.target.closest('[data-tp-day]') : null;
-    if (!b) return;
-    b.classList.toggle('on');
-  });
+  function bindDayChips(box) {
+    if (!box) return;
+    box.addEventListener('click', function (e) {
+      var b = e.target && e.target.closest ? e.target.closest('[data-day-pick]') : null;
+      if (!b) return;
+      b.classList.toggle('on');
+    });
+  }
+  bindDayChips($tcDays);
+  bindDayChips($tpDays);
 
   $timerModal.addEventListener('click', function (e) {
     var t = e.target;

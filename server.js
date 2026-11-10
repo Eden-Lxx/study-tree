@@ -367,6 +367,19 @@ function notesDir(uid) {
   return path.join(userDir(uid), 'notes');
 }
 
+/* 节点描述照片单独放一个目录，和笔记附件分开 */
+function photosDir(uid) {
+  return path.join(userDir(uid), 'photos');
+}
+
+function photoPathFor(uid, storedAs) {
+  const dir = photosDir(uid);
+  const safe = safeFileName(storedAs);
+  const full = path.join(dir, safe);
+  if (path.dirname(full) !== dir) return null;
+  return full;
+}
+
 /* ------------------------------------------------------------------ */
 /* 树数据规范化                                                        */
 /* ------------------------------------------------------------------ */
@@ -390,7 +403,22 @@ function normalizeNode(raw) {
     categoryId: typeof raw.categoryId === 'string' && raw.categoryId ? raw.categoryId.slice(0, 64) : null,
     ox: isFinite(ox) ? Math.round(ox) : 0,
     oy: isFinite(oy) ? Math.round(oy) : 0,
-    note: typeof raw.note === 'string' ? raw.note.slice(0, 20000) : ''
+    note: typeof raw.note === 'string' ? raw.note.slice(0, 20000) : '',
+    /* 节点描述照片：最多 3 张，文件在 data/users/<uid>/photos/ */
+    photos: (Array.isArray(raw.photos) ? raw.photos : []).slice(0, 3).map((p) => {
+      if (!p || typeof p !== 'object') return null;
+      const nm = typeof p.name === 'string' ? p.name.trim().slice(0, 120) : '';
+      const storedAs = typeof p.storedAs === 'string' ? safeFileName(p.storedAs) : '';
+      if (!nm || !storedAs) return null;
+      return {
+        id: typeof p.id === 'string' && p.id ? p.id.slice(0, 64) : 'ph' + crypto.randomBytes(4).toString('hex'),
+        name: nm,
+        mime: typeof p.mime === 'string' && p.mime ? p.mime.slice(0, 120) : extMime(nm),
+        size: isFinite(Number(p.size)) ? Math.max(0, Math.floor(Number(p.size))) : 0,
+        storedAs: storedAs,
+        createdAt: isFinite(Number(p.createdAt)) ? Math.floor(Number(p.createdAt)) : Date.now()
+      };
+    }).filter(Boolean)
   };
 }
 
@@ -910,6 +938,49 @@ async function handleApi(req, res, url, user) {
       const buf = await readBody(req);
       try { await fsp.writeFile(full, buf); } catch (e) { return fail(res, 404, '文件不存在，请重新上传'); }
       return sendJson(res, 200, { ok: true, size: buf.length });
+    }
+    if (req.method === 'DELETE') {
+      await fsp.unlink(full).catch(() => {});
+      return sendJson(res, 200, { ok: true });
+    }
+  }
+
+  /* 节点描述照片：上传 / 读取 / 删除 */
+  if (p === '/api/photos' && req.method === 'POST') {
+    const name = safeFileName(url.searchParams.get('name') || '');
+    const nodeId = (url.searchParams.get('nodeId') || '').slice(0, 64);
+    if (!nodeId) return fail(res, 400, '缺少 nodeId');
+    if (!/\.(png|jpe?g|gif|webp|bmp)$/i.test(name)) return fail(res, 400, '只支持图片文件');
+    const buf = await readBody(req);
+    if (!buf.length) return fail(res, 400, '文件是空的');
+    const id = newId('ph');
+    const storedAs = `${id}-${name}`;
+    await fsp.mkdir(photosDir(uid), { recursive: true });
+    await fsp.writeFile(path.join(photosDir(uid), storedAs), buf);
+    return sendJson(res, 201, {
+      ok: true,
+      photo: {
+        id: id, nodeId: nodeId, name: name, mime: extMime(name),
+        size: buf.length, storedAs: storedAs, createdAt: Date.now()
+      }
+    });
+  }
+
+  const photoMatch = p.match(/^\/api\/photos\/(.+)$/);
+  if (photoMatch) {
+    const storedAs = decodeURIComponent(photoMatch[1]);
+    const full = photoPathFor(uid, storedAs);
+    if (!full) return fail(res, 400, '非法文件名');
+    if (req.method === 'GET') {
+      let stat;
+      try { stat = await fsp.stat(full); } catch (e) { return fail(res, 404, '图片不存在'); }
+      res.writeHead(200, {
+        'Content-Type': extMime(storedAs),
+        'Content-Length': stat.size,
+        'Cache-Control': 'no-store'
+      });
+      fs.createReadStream(full).pipe(res);
+      return;
     }
     if (req.method === 'DELETE') {
       await fsp.unlink(full).catch(() => {});
