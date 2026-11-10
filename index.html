@@ -729,6 +729,35 @@
   .bp-img-add{display:inline-block;cursor:pointer;font-size:11px;padding:4px 9px;border-radius:6px}
   .bp-cover{width:100%;max-height:130px;object-fit:cover;border-radius:8px;margin-bottom:8px;display:block}
   .sec-sub{font-size:10.5px;color:#5d7090;font-weight:400;margin-left:6px}
+  /* ---------- 周视图课表 ---------- */
+  .tt-wrap{border:1px solid rgba(122,152,200,.12);border-radius:10px;overflow:hidden;background:rgba(8,14,24,.35)}
+  .tt-head{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:rgba(122,152,200,.06);border-bottom:1px solid rgba(122,152,200,.1)}
+  .tt-nav{border:0;background:rgba(122,152,200,.1);color:#9fb3cf;width:26px;height:26px;border-radius:7px;cursor:pointer;font-size:11px}
+  .tt-nav:hover{background:rgba(56,189,248,.16);color:#dff1ff}
+  .tt-title{text-align:center;line-height:1.3}
+  .tt-title b{display:block;font-size:13px;color:#dbe8f7}
+  .tt-title span{font-size:10.5px;color:#6b7d99;font-family:var(--mono)}
+  .tt-days{display:grid;grid-template-columns:44px repeat(7,1fr);background:rgba(122,152,200,.04);border-bottom:1px solid rgba(122,152,200,.1)}
+  .tt-day{text-align:center;padding:6px 2px;font-size:10.5px;color:#7f93ad;border-left:1px solid rgba(122,152,200,.06)}
+  .tt-day b{display:block;font-size:9.5px;color:#5d7090;font-family:var(--mono);margin-top:2px;font-weight:400}
+  .tt-day.today{color:#8fd8ff}
+  .tt-day.today b{color:#38bdf8}
+  .tt-body{display:flex;max-height:400px;overflow-y:auto;position:relative}
+  .tt-axis{flex:0 0 44px;position:relative;background:rgba(122,152,200,.03);border-right:1px solid rgba(122,152,200,.08)}
+  .tt-hour{position:absolute;right:5px;font-family:var(--mono);font-size:9px;color:#5d7090;transform:translateY(-50%)}
+  .tt-hour:first-child{transform:none}
+  .tt-grid{flex:1;display:grid;grid-template-columns:repeat(7,1fr);position:relative}
+  .tt-col{position:relative;border-left:1px solid rgba(122,152,200,.06);background-image:linear-gradient(rgba(122,152,200,.07) 1px,transparent 1px);background-size:100% 46px}
+  .tt-col.today{background-color:rgba(56,189,248,.04)}
+  .tt-block{position:absolute;left:2px;right:2px;border-radius:6px;padding:4px 5px;overflow:hidden;cursor:pointer;font-size:10px;line-height:1.25;color:#f2f7ff;z-index:2}
+  .tt-block b{display:block;font-size:10.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tt-block span{display:block;font-size:9px;opacity:.85;font-family:var(--mono);margin-top:1px}
+  .tt-block:hover{filter:brightness(1.15)}
+  .tt-block.plan{background:rgba(143,168,201,.10) !important;border:1px dashed rgba(143,168,201,.55);color:#b7c8dd}
+  .tt-block.plan b{font-weight:400}
+  .tt-now{position:absolute;left:0;right:0;height:0;border-top:2px solid #f87171;z-index:4;pointer-events:none}
+  .tt-now::before{content:'';position:absolute;left:-4px;top:-5px;width:8px;height:8px;border-radius:50%;background:#f87171}
+  .tt-legend{font-size:10.5px;color:#5d7090;margin:6px 0 0}
   /* ---------- 时间规划 ---------- */
   .timer-hero{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:6px}
   .timer-sub{font-family:var(--mono);font-size:11px;color:#6b7d99;margin:0 0 12px}
@@ -1268,8 +1297,23 @@
     </div>
 
     <div class="timer-sec">
-      <div class="timer-sec-head"><b>课表</b><span>按星期重复，占用可安排时段</span></div>
-      <div class="timer-list" id="timer-courses"></div>
+      <div class="tt-wrap">
+        <div class="tt-head">
+          <button class="tt-nav" id="tt-prev" type="button" aria-label="上一周">◀</button>
+          <div class="tt-title"><b id="tt-week">—</b><span id="tt-range"></span></div>
+          <button class="tt-nav" id="tt-next" type="button" aria-label="下一周">▶</button>
+        </div>
+        <div class="tt-days" id="tt-days"></div>
+        <div class="tt-body" id="tt-body">
+          <div class="tt-axis" id="tt-axis"></div>
+          <div class="tt-grid" id="tt-grid"></div>
+        </div>
+      </div>
+      <p class="tt-legend">实色 = 课程，虚框 = 日常规划；点卡片可删除，红线是当前时间。</p>
+    </div>
+
+    <div class="timer-sec">
+      <div class="timer-sec-head"><b>添加课程</b><span>勾选星期，一次加入多天</span></div>
       <div class="timer-add">
         <input id="tc-title" type="text" maxlength="30" placeholder="课程名">
         <input id="tc-start" type="time" value="08:00">
@@ -1281,8 +1325,7 @@
     </div>
 
     <div class="timer-sec">
-      <div class="timer-sec-head"><b>日常规划</b><span>固定作息，如晨跑、通勤、吃饭</span></div>
-      <div class="timer-list" id="timer-plans"></div>
+      <div class="timer-sec-head"><b>添加日常规划</b><span>固定作息，如晨跑、通勤、吃饭</span></div>
       <div class="timer-add timer-add-plan">
         <input id="tp-title" type="text" maxlength="30" placeholder="事项">
         <input id="tp-start" type="time" value="07:00">
@@ -1632,8 +1675,14 @@
   var $timerSub = document.getElementById('timer-sub');
   var $timerRate = document.getElementById('timer-rate');
   var $timerRateVal = document.getElementById('timer-rate-val');
-  var $timerCourses = document.getElementById('timer-courses');
-  var $timerPlans = document.getElementById('timer-plans');
+  var $ttPrev = document.getElementById('tt-prev');
+  var $ttNext = document.getElementById('tt-next');
+  var $ttWeek = document.getElementById('tt-week');
+  var $ttRange = document.getElementById('tt-range');
+  var $ttDays = document.getElementById('tt-days');
+  var $ttAxis = document.getElementById('tt-axis');
+  var $ttGrid = document.getElementById('tt-grid');
+  var $ttBody = document.getElementById('tt-body');
   var $tcTitle = document.getElementById('tc-title');
   var $tcStart = document.getElementById('tc-start');
   var $tcEnd = document.getElementById('tc-end');
@@ -3972,7 +4021,10 @@
     var st = timerStats();
     state.points = Math.round(st.available * 10) / 10;
     if ($points) $points.textContent = fmtPoint(state.points);
-    if ($timerModal && !$timerModal.hidden) renderTimerPanel(st);
+    if ($timerModal && !$timerModal.hidden && $timerHero) {
+      updateTimerHero(st);
+      updateNowLine();
+    }
     return st;
   }
 
@@ -5513,10 +5565,18 @@
   }
 
   /* ---------------- 时间规划面板 ---------------- */
-  function renderTimerPanel(st) {
-    if (!$timerHero) return;
-    st = st || timerStats();
+  function ensureDayChips(box) {
+    if (!box || box.childNodes.length) return;
+    for (var d2 = 1; d2 <= 7; d2++) {
+      var btn = el('button', 'tp-day on', DAY_NAMES[d2].replace('周', ''));
+      btn.type = 'button';
+      btn.setAttribute('data-day-pick', String(d2));
+      box.appendChild(btn);
+    }
+  }
 
+  function updateTimerHero(st) {
+    if (!$timerHero) return;
     $timerHero.textContent = '';
     function cell(label, value, cls) {
       var d = el('div', 'timer-cell');
@@ -5528,71 +5588,186 @@
     $timerHero.appendChild(cell('剩余空闲', fmtPoint(st.remainHours) + ' h'));
     $timerHero.appendChild(cell('倒计时·剩余可转化', fmtPoint(st.remain) + ' 点', 'warn'));
     $timerHero.appendChild(cell('当前可用科技点', fmtPoint(st.available) + ' 点', 'hot'));
-
     if ($timerSub) {
       $timerSub.textContent = '本周总 ' + fmtPoint(st.total) + ' 点 · 已赚 ' + fmtPoint(st.earned) +
         ' · 已用 ' + fmtPoint(st.spent) + ' · 任务奖励 ' + fmtPoint(st.bonus);
     }
-
     if (document.activeElement !== $timerRate) $timerRate.value = String(st.rate);
     $timerRateVal.textContent = st.rate + '%';
+  }
 
-    $timerCourses.textContent = '';
-    var courses = timerOf().courses.slice().sort(function (a, b) {
-      return a.day - b.day || a.start - b.start;
-    });
-    if (!courses.length) {
-      $timerCourses.appendChild(el('div', 'timer-empty', '还没有课程。加上课后，对应时段会自动从空闲时间里扣掉。'));
-    }
-    courses.forEach(function (c) {
-      var item = el('div', 'timer-item');
-      item.appendChild(el('span', 'ti-day', DAY_NAMES[c.day] || ''));
-      item.appendChild(el('span', 'ti-time', minToHhmm(c.start) + '–' + minToHhmm(c.end)));
-      item.appendChild(el('span', 'ti-title', c.title));
-      var del = el('button', 'ti-del', '×');
-      del.type = 'button';
-      del.setAttribute('data-tc-del', c.id);
-      del.title = '删除这门课';
-      item.appendChild(del);
-      $timerCourses.appendChild(item);
-    });
-
-    $timerPlans.textContent = '';
-    var plans = timerOf().plans.slice().sort(function (a, b) { return a.start - b.start; });
-    if (!plans.length) {
-      $timerPlans.appendChild(el('div', 'timer-empty', '还没有日常安排。像晨跑、通勤、吃饭这类固定占用可以加在这里。'));
-    }
-    plans.forEach(function (p) {
-      var item = el('div', 'timer-item');
-      var days = p.days.length === 7 ? '每天' : p.days.map(function (d) { return DAY_NAMES[d]; }).join(' ');
-      item.appendChild(el('span', 'ti-day', days));
-      item.appendChild(el('span', 'ti-time', minToHhmm(p.start) + '–' + minToHhmm(p.end)));
-      item.appendChild(el('span', 'ti-title', p.title));
-      var del = el('button', 'ti-del', '×');
-      del.type = 'button';
-      del.setAttribute('data-tp-del', p.id);
-      del.title = '删除这条安排';
-      item.appendChild(del);
-      $timerPlans.appendChild(item);
-    });
-
-    function ensureDayChips(box) {
-      if (!box || box.childNodes.length) return;
-      for (var d2 = 1; d2 <= 7; d2++) {
-        var btn = el('button', 'tp-day on', DAY_NAMES[d2].replace('周', ''));
-        btn.type = 'button';
-        btn.setAttribute('data-day-pick', String(d2));
-        box.appendChild(btn);
-      }
-    }
+  function renderTimerPanel(st) {
+    if (!$timerHero) return;
+    updateTimerHero(st || timerStats());
+    renderTimetable();
     ensureDayChips($tcDays);
     ensureDayChips($tpDays);
+  }
+
+  /* ---------------- 周视图课表 ---------------- */
+  var TT_START = 480;   // 08:00
+  var TT_END = 1320;    // 22:00
+  var TT_HOUR = 46;     // 每小时高度(px)
+  var ttWeekOffset = 0;
+
+  function ttColor(name) {
+    var h = 0;
+    for (var i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+    return 'hsl(' + h + ',38%,44%)';
+  }
+
+  function ttWeekStart(offset) {
+    return weekStartTs(Date.now()) + (offset || 0) * 7 * 86400000;
+  }
+
+  function dayKeyOf(ts) {
+    var d = new Date(ts);
+    return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+  }
+
+  function fmtMd(ts) {
+    var d = new Date(ts);
+    return (d.getMonth() + 1) + '/' + d.getDate();
+  }
+
+  function renderTimetable() {
+    if (!$ttGrid) return;
+    var ws = ttWeekStart(ttWeekOffset);
+    var totalH = (TT_END - TT_START) / 60;
+    var todayKey = dayKeyOf(Date.now());
+
+    $ttWeek.textContent = '第 ' + Number(weekKey(new Date(ws)).replace(/^\d+W/, '')) + ' 周';
+    $ttRange.textContent = fmtMd(ws) + ' – ' + fmtMd(ws + 6 * 86400000);
+
+    $ttDays.textContent = '';
+    $ttDays.appendChild(el('div', 'tt-day', ''));
+    for (var i = 0; i < 7; i++) {
+      var dayTs = ws + i * 86400000;
+      var dd = new Date(dayTs);
+      var cell = el('div', 'tt-day' + (dayKeyOf(dayTs) === todayKey ? ' today' : ''));
+      cell.appendChild(document.createTextNode(DAY_NAMES[i + 1]));
+      cell.appendChild(el('b', '', (dd.getMonth() + 1) + '/' + dd.getDate()));
+      $ttDays.appendChild(cell);
+    }
+
+    $ttAxis.textContent = '';
+    for (var m = TT_START; m <= TT_END; m += 60) {
+      var lab = el('span', 'tt-hour', minToHhmm(m));
+      lab.style.top = ((m - TT_START) / 60 * TT_HOUR) + 'px';
+      $ttAxis.appendChild(lab);
+    }
+    $ttAxis.style.height = (totalH * TT_HOUR) + 'px';
+
+    $ttGrid.textContent = '';
+    var cols = [];
+    for (var c = 0; c < 7; c++) {
+      var col = el('div', 'tt-col' + (dayKeyOf(ws + c * 86400000) === todayKey ? ' today' : ''));
+      col.style.height = (totalH * TT_HOUR) + 'px';
+      $ttGrid.appendChild(col);
+      cols.push(col);
+    }
+
+    function place(day, start, end, title, cls, color) {
+      var col = cols[day - 1];
+      if (!col) return null;
+      var s = Math.max(start, TT_START);
+      var e = Math.min(end, TT_END);
+      if (e <= s) return null;
+      var block = el('div', 'tt-block' + (cls ? ' ' + cls : ''));
+      block.style.top = ((s - TT_START) / 60 * TT_HOUR) + 'px';
+      block.style.height = Math.max(20, (e - s) / 60 * TT_HOUR - 2) + 'px';
+      if (color) block.style.background = color;
+      block.appendChild(el('b', '', title));
+      block.appendChild(el('span', '', minToHhmm(start) + '–' + minToHhmm(end)));
+      col.appendChild(block);
+      return block;
+    }
+
+    var t = timerOf();
+    t.courses.forEach(function (c) {
+      var b = place(c.day, c.start, c.end, c.title, 'course', ttColor(c.title));
+      if (b) b.setAttribute('data-tt-del', 'c:' + c.id);
+    });
+    t.plans.forEach(function (p) {
+      (p.days || []).forEach(function (d2) {
+        var b = place(d2, p.start, p.end, p.title, 'plan');
+        if (b) b.setAttribute('data-tt-del', 'p:' + p.id);
+      });
+    });
+
+    if (ttWeekOffset === 0) {
+      var now = new Date();
+      var mins = now.getHours() * 60 + now.getMinutes();
+      if (mins >= TT_START && mins <= TT_END) {
+        var line = el('div', 'tt-now');
+        line.style.top = ((mins - TT_START) / 60 * TT_HOUR) + 'px';
+        $ttGrid.appendChild(line);
+      }
+    }
+  }
+
+  /* 实时时间线：只移动红线，不重建整张表 */
+  function updateNowLine() {
+    if (!$ttGrid || !$timerModal || $timerModal.hidden) return;
+    var line = $ttGrid.querySelector('.tt-now');
+    if (ttWeekOffset !== 0) { if (line) line.remove(); return; }
+    var now = new Date();
+    var mins = now.getHours() * 60 + now.getMinutes();
+    if (mins < TT_START || mins > TT_END) { if (line) line.remove(); return; }
+    if (!line) {
+      line = el('div', 'tt-now');
+      $ttGrid.appendChild(line);
+    }
+    line.style.top = ((mins - TT_START) / 60 * TT_HOUR) + 'px';
+  }
+
+  $ttPrev.addEventListener('click', function () { ttWeekOffset--; renderTimetable(); });
+  $ttNext.addEventListener('click', function () { ttWeekOffset++; renderTimetable(); });
+
+  $ttGrid.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('[data-tt-del]') : null;
+    if (!b) return;
+    var v = b.getAttribute('data-tt-del');
+    var kind = v.charAt(0);
+    var id = v.slice(2);
+    var t = timerOf();
+    if (kind === 'c') {
+      var c = null;
+      t.courses.forEach(function (x) { if (x.id === id) c = x; });
+      if (!c) return;
+      askConfirm('删除课程「' + c.title + '」？', '只从课表里移除，已经点亮的节点不受影响。', '删除').then(function (yes) {
+        if (!yes) return;
+        t.courses = t.courses.filter(function (x) { return x.id !== id; });
+        syncPoints(); saveNow(); render(); renderTimetable();
+      });
+    } else {
+      var p = null;
+      t.plans.forEach(function (x) { if (x.id === id) p = x; });
+      if (!p) return;
+      askConfirm('删除规划「' + p.title + '」？', '会从所有重复的星期里一起移除。', '删除').then(function (yes) {
+        if (!yes) return;
+        t.plans = t.plans.filter(function (x) { return x.id !== id; });
+        syncPoints(); saveNow(); render(); renderTimetable();
+      });
+    }
+  });
+
+  /* 打开面板时把视口滚到当前时间附近 */
+  function scrollToNow() {
+    if (!$ttBody) return;
+    var now = new Date();
+    var mins = now.getHours() * 60 + now.getMinutes();
+    if (mins < TT_START) mins = TT_START;
+    if (mins > TT_END) mins = TT_START + 120;
+    var top = ((mins - TT_START) / 60 * TT_HOUR) - ($ttBody.clientHeight / 2);
+    $ttBody.scrollTop = Math.max(0, top);
   }
 
   function openTimer() {
     if (readOnly) { toast('访客模式不能改时间规划', true); return; }
     $timerModal.hidden = false;
     renderTimerPanel();
+    setTimeout(scrollToNow, 40);
   }
 
   $btnTimer.addEventListener('click', openTimer);
@@ -5625,7 +5800,7 @@
       t.courses.push({ id: makeId(), day: d, start: s, end: e, title: title.slice(0, 30) });
     });
     $tcTitle.value = '';
-    syncPoints(); saveNow(); render();
+    syncPoints(); saveNow(); render(); renderTimetable();
     toast(inSlot
       ? ('已加 ' + days.length + ' 天「' + title + '」')
       : ('已加 ' + days.length + ' 天，但这段不在可安排时段（8-12 / 12-17 / 19-22）内，不影响空闲'));
@@ -5643,7 +5818,7 @@
     if (!days.length) { toast('至少选一天', true); return; }
     timerOf().plans.push({ id: makeId(), days: days, start: s, end: e, title: title.slice(0, 30) });
     $tpTitle.value = '';
-    syncPoints(); saveNow(); render();
+    syncPoints(); saveNow(); render(); renderTimetable();
   });
 
   function bindDayChips(box) {
