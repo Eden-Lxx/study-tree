@@ -717,6 +717,41 @@
   .bp-badge.other{background:rgba(245,185,66,.14);color:#f5c264}
   .bp-badge.vis-private{background:rgba(248,113,113,.14);color:#f9a8a8}
   .bp-badge.vis-friends{background:rgba(52,211,153,.16);color:#6ee7b7}
+  /* ---------- 时间规划 ---------- */
+  .timer-hero{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:6px}
+  .timer-sub{font-family:var(--mono);font-size:11px;color:#6b7d99;margin:0 0 12px}
+  .timer-cell{background:rgba(8,14,24,.55);border:1px solid rgba(122,152,200,.12);border-radius:9px;padding:9px 10px}
+  .timer-cell span{display:block;font-size:10.5px;color:#6b7d99;letter-spacing:.04em}
+  .timer-cell b{display:block;margin-top:4px;font-family:var(--mono);font-size:16px;color:#cfe4ff}
+  .timer-cell b.hot{color:#7fe3c4}
+  .timer-cell b.warn{color:#f5c264}
+  .timer-rate-row{display:flex;align-items:center;gap:12px}
+  .timer-rate-row input[type=range]{flex:1;accent-color:#38bdf8}
+  .timer-rate-row b{font-family:var(--mono);font-size:15px;color:#8fd8ff;min-width:48px;text-align:right}
+  .timer-sec{margin-top:14px;border-top:1px solid rgba(122,152,200,.1);padding-top:12px}
+  .timer-sec-head{display:flex;align-items:baseline;gap:8px;margin-bottom:8px}
+  .timer-sec-head b{font-size:13px;color:#dbe8f7}
+  .timer-sec-head span{font-size:11px;color:#5d7090}
+  .timer-list{display:flex;flex-direction:column;gap:5px;margin-bottom:8px}
+  .timer-item{display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:7px;background:rgba(8,14,24,.45);border:1px solid rgba(122,152,200,.1);font-size:12px;color:#b7c8dd}
+  .timer-item .ti-day{font-family:var(--mono);font-size:10.5px;color:#6f9fd0;min-width:34px}
+  .timer-item .ti-time{font-family:var(--mono);font-size:11px;color:#8fa6c2}
+  .timer-item .ti-title{flex:1;color:#d5e3f4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .timer-item .ti-del{border:0;background:transparent;color:#6b7d99;cursor:pointer;font-size:14px;padding:0 3px;line-height:1}
+  .timer-item .ti-del:hover{color:#f87171}
+  .timer-empty{font-size:11.5px;color:#5d7090;padding:4px 2px}
+  .timer-add{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .timer-add input[type=text]{flex:1;min-width:110px}
+  .timer-add input[type=time]{width:auto;min-width:96px}
+  .timer-add select{width:auto;min-width:74px}
+  .timer-dash{color:#5d7090;font-size:12px}
+  .tp-days{display:flex;gap:3px;flex-basis:100%;margin-top:2px}
+  .tp-day{border:1px solid rgba(122,152,200,.16);background:rgba(122,152,200,.07);color:#8fa6c2;font-size:10.5px;padding:3px 7px;border-radius:999px;cursor:pointer}
+  .tp-day.on{background:rgba(56,189,248,.16);border-color:rgba(56,189,248,.42);color:#dff1ff}
+  @media(max-width:620px){
+    .timer-hero{grid-template-columns:repeat(2,1fr)}
+    .timer-add input[type=text]{flex-basis:100%}
+  }
   .bp-title-row{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
   .bp-tip{font-size:12px;color:#6b7d99;line-height:1.7;margin:0 0 10px}
   .bp-node-box{
@@ -817,10 +852,11 @@
         <div class="pc-track"><div class="pc-fill" id="hud-fill"></div></div>
         <b class="pc-pct" id="hud-pct">0%</b>
       </div>
-      <div class="points-pill">
+      <div class="points-pill" title="本周可用科技点：按空闲时间 × 转化率实时计算">
         <span class="points-label">科技点</span>
         <strong id="points">10</strong>
       </div>
+      <button class="btn-io" id="btn-timer" type="button" title="课表 / 日常规划 / 科技点转化"><b>◷</b>时间</button>
       <button class="btn-io" id="btn-bp" type="button" title="蓝图市场 / 我的蓝图库"><b>◈</b>蓝图</button>
       <button class="btn-io" id="btn-export" type="button" title="把整棵学习树导出成一个文件"><b>↓</b>导出</button>
       <button class="btn-io" id="btn-import" type="button" title="导入别人的学习树文件"><b>↑</b>导入</button>
@@ -1166,6 +1202,61 @@
   </div>
 </div>
 
+<div class="modal" id="timer-modal" hidden>
+  <div class="modal-box" style="max-width:700px">
+    <div class="admin-head">
+      <h3>时间规划 · 科技点</h3>
+      <button class="icon-btn" id="timer-close" type="button" aria-label="关闭">×</button>
+    </div>
+
+    <div class="timer-hero" id="timer-hero"></div>
+    <div class="timer-sub" id="timer-sub"></div>
+
+    <div class="field">
+      <label for="timer-rate">转化率：空闲时间 → 科技点</label>
+      <div class="timer-rate-row">
+        <input id="timer-rate" type="range" min="0" max="100" step="1">
+        <b id="timer-rate-val">50%</b>
+      </div>
+      <p class="hint">例：一天 12 小时可安排时间、转化率 50% → 6 个科技点</p>
+    </div>
+
+    <div class="timer-sec">
+      <div class="timer-sec-head"><b>课表</b><span>按星期重复，占用可安排时段</span></div>
+      <div class="timer-list" id="timer-courses"></div>
+      <div class="timer-add">
+        <input id="tc-title" type="text" maxlength="30" placeholder="课程名">
+        <select id="tc-day">
+          <option value="1">周一</option>
+          <option value="2">周二</option>
+          <option value="3">周三</option>
+          <option value="4">周四</option>
+          <option value="5">周五</option>
+          <option value="6">周六</option>
+          <option value="7">周日</option>
+        </select>
+        <input id="tc-start" type="time" value="08:00">
+        <span class="timer-dash">–</span>
+        <input id="tc-end" type="time" value="09:40">
+        <button class="btn-primary" id="tc-add" type="button">添加</button>
+      </div>
+    </div>
+
+    <div class="timer-sec">
+      <div class="timer-sec-head"><b>日常规划</b><span>固定作息，如晨跑、通勤、吃饭</span></div>
+      <div class="timer-list" id="timer-plans"></div>
+      <div class="timer-add timer-add-plan">
+        <input id="tp-title" type="text" maxlength="30" placeholder="事项">
+        <input id="tp-start" type="time" value="07:00">
+        <span class="timer-dash">–</span>
+        <input id="tp-end" type="time" value="08:00">
+        <div class="tp-days" id="tp-days"></div>
+        <button class="btn-primary" id="tp-add" type="button">添加</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="bp-modal" hidden>
   <div class="modal-box" style="max-width:660px">
     <div class="admin-head">
@@ -1340,9 +1431,13 @@
   var INITIAL_POINTS = 10;
   var MAX_FILE = 32 * 1024 * 1024;
 
+  /* 每天可安排时段（分钟）：08:00-12:00 / 12:00-17:00 / 19:00-22:00，合计 12 小时 */
+  var TIME_SLOTS = [[480, 720], [720, 1020], [1140, 1320]];
+  var DAY_NAMES = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+
   // 数据全部通过本地服务读写到 data/ 文件夹
   // 与 server.js 的 API_VERSION 对应；后台更低就说明还连着旧进程
-  var API_EXPECT = 11;
+  var API_EXPECT = 12;
 
   var API = {
     tree: '/api/tree',
@@ -1474,6 +1569,22 @@
   var $bpPubInfo = document.getElementById('bp-pub-info');
   var $bpPubTitle = document.getElementById('bp-pub-title');
   var $bpPubNote = document.getElementById('bp-pub-note');
+  var $btnTimer = document.getElementById('btn-timer');
+  var $timerModal = document.getElementById('timer-modal');
+  var $timerHero = document.getElementById('timer-hero');
+  var $timerSub = document.getElementById('timer-sub');
+  var $timerRate = document.getElementById('timer-rate');
+  var $timerRateVal = document.getElementById('timer-rate-val');
+  var $timerCourses = document.getElementById('timer-courses');
+  var $timerPlans = document.getElementById('timer-plans');
+  var $tcTitle = document.getElementById('tc-title');
+  var $tcDay = document.getElementById('tc-day');
+  var $tcStart = document.getElementById('tc-start');
+  var $tcEnd = document.getElementById('tc-end');
+  var $tpTitle = document.getElementById('tp-title');
+  var $tpStart = document.getElementById('tp-start');
+  var $tpEnd = document.getElementById('tp-end');
+  var $tpDays = document.getElementById('tp-days');
   var $catModal = document.getElementById('cat-modal');
   var $catName = document.getElementById('cat-name');
   var $catDel = document.getElementById('cat-del');
@@ -1563,11 +1674,17 @@
     { id: 'cat_study', name: '学习' }
   ];
 
+  /* 时间规划：把一周的空闲时间按转化率换成科技点 */
+  function defaultTimer() {
+    return { rate: 50, courses: [], plans: [], spent: 0, bonus: 0, weekKey: '' };
+  }
+
   function defaultState() {
     return {
       points: INITIAL_POINTS,
       abilities: [], files: [], exp: 0, tasks: [], week: { key: '' },
-      categories: DEFAULT_CATS.map(function (c) { return { id: c.id, name: c.name }; })
+      categories: DEFAULT_CATS.map(function (c) { return { id: c.id, name: c.name }; }),
+      timer: defaultTimer()
     };
   }
 
@@ -1625,6 +1742,58 @@
       storedAs: typeof raw.storedAs === 'string' ? raw.storedAs : '',
       createdAt: isFinite(Number(raw.createdAt)) ? Number(raw.createdAt) : Date.now()
     };
+  }
+
+  function hhmmToMin(s) {
+    var m = /^(\d{1,2}):(\d{2})$/.exec(String(s || ''));
+    if (!m) return NaN;
+    var h = Number(m[1]), mi = Number(m[2]);
+    if (h < 0 || h > 23 || mi < 0 || mi > 59) return NaN;
+    return h * 60 + mi;
+  }
+
+  function minToHhmm(v) {
+    v = Math.max(0, Math.min(1439, Math.round(Number(v) || 0)));
+    return (v < 600 ? '0' : '') + Math.floor(v / 60) + ':' + (v % 60 < 10 ? '0' : '') + (v % 60);
+  }
+
+  function normalizeTimer(raw) {
+    var t = defaultTimer();
+    if (!raw || typeof raw !== 'object') return t;
+    var rate = Number(raw.rate);
+    t.rate = isFinite(rate) ? Math.max(0, Math.min(100, Math.round(rate))) : 50;
+    var spent = Number(raw.spent), bonus = Number(raw.bonus);
+    t.spent = isFinite(spent) && spent > 0 ? spent : 0;
+    t.bonus = isFinite(bonus) && bonus > 0 ? bonus : 0;
+    t.weekKey = typeof raw.weekKey === 'string' ? raw.weekKey : '';
+
+    t.courses = (Array.isArray(raw.courses) ? raw.courses : []).map(function (c) {
+      if (!c || typeof c !== 'object') return null;
+      var day = Math.round(Number(c.day));
+      var s = Math.round(Number(c.start)), e = Math.round(Number(c.end));
+      if (!(day >= 1 && day <= 7) || !isFinite(s) || !isFinite(e) || e <= s) return null;
+      return {
+        id: typeof c.id === 'string' && c.id ? c.id : makeId(),
+        day: day, start: s, end: e,
+        title: String(c.title || '').trim().slice(0, 30) || '课程'
+      };
+    }).filter(Boolean);
+
+    t.plans = (Array.isArray(raw.plans) ? raw.plans : []).map(function (p) {
+      if (!p || typeof p !== 'object') return null;
+      var s = Math.round(Number(p.start)), e = Math.round(Number(p.end));
+      if (!isFinite(s) || !isFinite(e) || e <= s) return null;
+      var days = (Array.isArray(p.days) ? p.days : []).map(function (x) { return Math.round(Number(x)); })
+        .filter(function (d) { return d >= 1 && d <= 7; });
+      if (!days.length) days = [1, 2, 3, 4, 5, 6, 7];
+      return {
+        id: typeof p.id === 'string' && p.id ? p.id : makeId(),
+        days: days, start: s, end: e,
+        title: String(p.title || '').trim().slice(0, 30) || '日常安排'
+      };
+    }).filter(Boolean);
+
+    return t;
   }
 
   function fromDocument(doc) {
@@ -1710,13 +1879,14 @@
 
     var pts = Number(doc.points);
     return {
-      points: isFinite(pts) && pts >= 0 ? Math.floor(pts) : INITIAL_POINTS,
+      points: isFinite(pts) && pts >= 0 ? pts : INITIAL_POINTS,
       exp: expValue,
       abilities: list,
       files: files,
       tasks: tasks,
       week: week,
-      categories: cats
+      categories: cats,
+      timer: normalizeTimer(doc.timer)
     };
   }
 
@@ -1734,14 +1904,15 @@
 
   function documentOf() {
     return {
-      version: 6,
+      version: 7,
       points: state.points,
       exp: state.exp || 0,
       categories: state.categories,
       abilities: state.abilities,
       files: state.files,
       tasks: state.tasks || [],
-      week: state.week || { key: '' }
+      week: state.week || { key: '' },
+      timer: state.timer || defaultTimer()
     };
   }
 
@@ -2186,7 +2357,7 @@
   }
 
   function render() {
-    $points.textContent = String(state.points);
+    syncPoints();
     renderCats();
 
     var layout = computeLayout();
@@ -2634,11 +2805,12 @@
       toast('要先点亮「' + prereqOf(a).name + '」才能点亮它', true);
       return;
     }
-    if (state.points < a.cost) { toast('科技点不足，还差 ' + (a.cost - state.points) + ' 点', true); return; }
-    state.points -= a.cost;
+    var avail = syncPoints().available;
+    if (avail < a.cost) { toast('科技点不足，还差 ' + fmtPoint(a.cost - avail) + ' 点', true); return; }
+    timerOf().spent += a.cost;
     a.unlocked = true;
     addExp(a.cost);
-    saveNow(); render(); syncDrawer();
+    syncPoints(); saveNow(); render(); syncDrawer();
     toast('已点亮「' + a.name + '」，消耗 ' + a.cost + ' 小时');
   }
 
@@ -2664,12 +2836,13 @@
 
     if (!order.length) { toast('没有可以继续点亮的节点了', true); return; }
     var cost = order.reduce(function (s, k) { return s + k.cost; }, 0);
-    if (state.points < cost) { toast('科技点不足，还差 ' + (cost - state.points) + ' 点', true); return; }
+    var avail = syncPoints().available;
+    if (avail < cost) { toast('科技点不足，还差 ' + fmtPoint(cost - avail) + ' 点', true); return; }
 
-    state.points -= cost;
+    timerOf().spent += cost;
     addExp(cost);
     order.forEach(function (k) { k.unlocked = true; });
-    saveNow(); render(); syncDrawer();
+    syncPoints(); saveNow(); render(); syncDrawer();
     toast('已点亮「' + g.name + '」' + order.length + ' 个知识点，消耗 ' + cost + ' 小时');
   }
 
@@ -3299,6 +3472,110 @@
     tweenView(48 - p.x * k, rect.height / 2 - cy * k, k);
   }
 
+  /* ---------------- 时间规划 → 科技点 ---------------- */
+  function timerOf() {
+    if (!state.timer || typeof state.timer !== 'object') state.timer = defaultTimer();
+    return state.timer;
+  }
+
+  /* 本周一 00:00 的时间戳（周一为一周起点） */
+  function weekStartTs(now) {
+    var d = new Date(now);
+    var day = d.getDay(); // 0=周日
+    var diff = day === 0 ? -6 : 1 - day;
+    var s = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    s.setDate(s.getDate() + diff);
+    return s.getTime();
+  }
+
+  /* 某一天的占用区间（课程 + 日常规划），合并重叠部分 */
+  function busyIntervalsOfDay(day) {
+    var t = timerOf();
+    var arr = [];
+    t.courses.forEach(function (c) { if (c.day === day) arr.push([c.start, c.end]); });
+    t.plans.forEach(function (p) { if (p.days.indexOf(day) > -1) arr.push([p.start, p.end]); });
+    arr.sort(function (a, b) { return a[0] - b[0]; });
+    var out = [];
+    arr.forEach(function (x) {
+      var last = out[out.length - 1];
+      if (last && x[0] <= last[1]) last[1] = Math.max(last[1], x[1]);
+      else out.push([x[0], x[1]]);
+    });
+    return out;
+  }
+
+  /* 某天 [fromMin, toMin] 内、落在可安排时段里的空闲分钟 */
+  function freeMinOfDay(day, fromMin, toMin) {
+    var busy = busyIntervalsOfDay(day);
+    var total = 0;
+    TIME_SLOTS.forEach(function (slot) {
+      var s = Math.max(slot[0], fromMin);
+      var e = Math.min(slot[1], toMin);
+      if (e <= s) return;
+      var free = e - s;
+      busy.forEach(function (b) {
+        var bs = Math.max(b[0], s), be = Math.min(b[1], e);
+        if (be > bs) free -= (be - bs);
+      });
+      total += Math.max(0, free);
+    });
+    return total;
+  }
+
+  /* 汇总：本周总空闲 / 剩余空闲 / 已赚 / 倒计时 / 可用 */
+  function timerStats(now) {
+    now = now || Date.now();
+    var ws = weekStartTs(now);
+    var we = ws + 7 * 86400000;
+    var totalMin = 0, remainMin = 0;
+    for (var i = 0; i < 7; i++) {
+      var dayStart = ws + i * 86400000;
+      var day = i + 1; // 周一=1 ... 周日=7
+      totalMin += freeMinOfDay(day, 0, 1440);
+      var from = Math.max(dayStart, now);
+      var to = Math.min(dayStart + 86400000, we);
+      if (to <= from) continue;
+      var fm = Math.floor((from - dayStart) / 60000);
+      var tm = Math.ceil((to - dayStart) / 60000);
+      remainMin += freeMinOfDay(day, fm, tm);
+    }
+    var t = timerOf();
+    var rate = (Number(t.rate) || 0) / 100;
+    var bonus = Number(t.bonus) || 0;
+    var spent = Number(t.spent) || 0;
+    var total = (totalMin / 60) * rate;
+    var remain = (remainMin / 60) * rate;
+    var earned = total - remain;
+    return {
+      totalHours: totalMin / 60,
+      remainHours: remainMin / 60,
+      earnedHours: (totalMin - remainMin) / 60,
+      total: total,
+      remain: remain,
+      earned: earned,
+      bonus: bonus,
+      spent: spent,
+      available: Math.max(0, earned + bonus - spent),
+      rate: Number(t.rate) || 0,
+      weekStart: ws,
+      weekEnd: we
+    };
+  }
+
+  function fmtPoint(n) {
+    var v = Math.round((Number(n) || 0) * 10) / 10;
+    return Math.abs(v - Math.round(v)) < 0.05 ? String(Math.round(v)) : v.toFixed(1);
+  }
+
+  /* 把计算出的可用科技点同步到 state.points 和顶栏 */
+  function syncPoints() {
+    var st = timerStats();
+    state.points = Math.round(st.available * 10) / 10;
+    if ($points) $points.textContent = fmtPoint(state.points);
+    if ($timerModal && !$timerModal.hidden) renderTimerPanel(st);
+    return st;
+  }
+
   /* ---------------- 周常任务 ---------------- */
   var taskEditingId = null;
 
@@ -3351,12 +3628,12 @@
     if (!t.done) {
       t.done = true;
       t.doneAt = Date.now();
-      state.points += t.points;
+      timerOf().bonus += t.points;
       toast('完成「' + t.name + '」 +' + t.points + ' 科技点');
     } else {
       t.done = false;
       t.doneAt = 0;
-      state.points = Math.max(0, state.points - t.points);
+      timerOf().bonus = Math.max(0, timerOf().bonus - t.points);
       toast('已取消完成 −' + t.points + ' 科技点');
     }
     saveNow(); render(); renderTasks();
@@ -3387,7 +3664,10 @@
 
     var editing = taskEditingId ? findTask(taskEditingId) : null;
     if (editing) {
-      if (editing.done) state.points = Math.max(0, state.points - editing.points + pts);
+      if (editing.done) {
+        var tb = timerOf();
+        tb.bonus = Math.max(0, tb.bonus - editing.points + pts);
+      }
       editing.name = name.slice(0, 60);
       editing.points = pts;
     } else {
@@ -3433,8 +3713,10 @@
     var key = weekKey(new Date());
     if (!state.week || !state.week.key) {
       state.week = { key: key };
+      timerOf().weekKey = key;
       saveNow();
       renderTasks();
+      syncPoints();
       return;
     }
     if (state.week.key === key) return;
@@ -3443,11 +3725,16 @@
     var before = state.points;
     state.week = { key: key };
     (state.tasks || []).forEach(function (t) { t.done = false; t.doneAt = 0; });
-    state.points = INITIAL_POINTS;
+    var tw = timerOf();
+    tw.spent = 0;
+    tw.bonus = 0;
+    tw.weekKey = key;
+    var fresh = syncPoints();
 
     saveNow(); render(); renderTasks();
-    $weekText.textContent = '上周（' + oldKey + '）已经结束：科技点从 ' + before + ' 刷新为 ' + INITIAL_POINTS +
-      '，周常任务全部重置。新的一周（' + key + '）继续。';
+    $weekText.textContent = '上周（' + oldKey + '）已经结束：周常任务全部重置，' +
+      '新一周（' + key + '）按空闲时间重新计算，当前可用 ' + fmtPoint(fresh.available) +
+      ' 科技点（上周结束时是 ' + fmtPoint(before) + '）。';
     $weekModal.hidden = false;
   }
 
@@ -3572,7 +3859,7 @@
         return fetch(API.prune, { method: 'POST' });
       }).catch(function () {});
       render(); refreshDataPanel();
-      toast('已重置，科技点回到 ' + INITIAL_POINTS);
+      toast('已重置，科技点按空闲时间重新计算');
     });
   });
 
@@ -4245,6 +4532,12 @@
     loadFriends();
   }, 60000);
 
+  // 科技点倒计时：每秒按「本周剩余空闲时间 × 转化率」重算一次
+  setInterval(function () {
+    if (document.hidden || readOnly || !currentUser) return;
+    syncPoints();
+  }, 1000);
+
   /* ---------------- 反馈 ---------------- */
   function fmtTime(ts) {
     if (!ts) return '—';
@@ -4778,6 +5071,147 @@
     if (!dumped) ordered.forEach(function (x) { out.push(x); });
     state.abilities = out.concat(state.abilities.filter(function (a) { return !!a.parentId; }));
   }
+
+  /* ---------------- 时间规划面板 ---------------- */
+  function renderTimerPanel(st) {
+    if (!$timerHero) return;
+    st = st || timerStats();
+
+    $timerHero.textContent = '';
+    function cell(label, value, cls) {
+      var d = el('div', 'timer-cell');
+      d.appendChild(el('span', '', label));
+      d.appendChild(el('b', cls || '', value));
+      return d;
+    }
+    $timerHero.appendChild(cell('本周空闲', fmtPoint(st.totalHours) + ' h'));
+    $timerHero.appendChild(cell('剩余空闲', fmtPoint(st.remainHours) + ' h'));
+    $timerHero.appendChild(cell('倒计时·剩余可转化', fmtPoint(st.remain) + ' 点', 'warn'));
+    $timerHero.appendChild(cell('当前可用科技点', fmtPoint(st.available) + ' 点', 'hot'));
+
+    if ($timerSub) {
+      $timerSub.textContent = '本周总 ' + fmtPoint(st.total) + ' 点 · 已赚 ' + fmtPoint(st.earned) +
+        ' · 已用 ' + fmtPoint(st.spent) + ' · 任务奖励 ' + fmtPoint(st.bonus);
+    }
+
+    if (document.activeElement !== $timerRate) $timerRate.value = String(st.rate);
+    $timerRateVal.textContent = st.rate + '%';
+
+    $timerCourses.textContent = '';
+    var courses = timerOf().courses.slice().sort(function (a, b) {
+      return a.day - b.day || a.start - b.start;
+    });
+    if (!courses.length) {
+      $timerCourses.appendChild(el('div', 'timer-empty', '还没有课程。加上课后，对应时段会自动从空闲时间里扣掉。'));
+    }
+    courses.forEach(function (c) {
+      var item = el('div', 'timer-item');
+      item.appendChild(el('span', 'ti-day', DAY_NAMES[c.day] || ''));
+      item.appendChild(el('span', 'ti-time', minToHhmm(c.start) + '–' + minToHhmm(c.end)));
+      item.appendChild(el('span', 'ti-title', c.title));
+      var del = el('button', 'ti-del', '×');
+      del.type = 'button';
+      del.setAttribute('data-tc-del', c.id);
+      del.title = '删除这门课';
+      item.appendChild(del);
+      $timerCourses.appendChild(item);
+    });
+
+    $timerPlans.textContent = '';
+    var plans = timerOf().plans.slice().sort(function (a, b) { return a.start - b.start; });
+    if (!plans.length) {
+      $timerPlans.appendChild(el('div', 'timer-empty', '还没有日常安排。像晨跑、通勤、吃饭这类固定占用可以加在这里。'));
+    }
+    plans.forEach(function (p) {
+      var item = el('div', 'timer-item');
+      var days = p.days.length === 7 ? '每天' : p.days.map(function (d) { return DAY_NAMES[d]; }).join(' ');
+      item.appendChild(el('span', 'ti-day', days));
+      item.appendChild(el('span', 'ti-time', minToHhmm(p.start) + '–' + minToHhmm(p.end)));
+      item.appendChild(el('span', 'ti-title', p.title));
+      var del = el('button', 'ti-del', '×');
+      del.type = 'button';
+      del.setAttribute('data-tp-del', p.id);
+      del.title = '删除这条安排';
+      item.appendChild(del);
+      $timerPlans.appendChild(item);
+    });
+
+    if ($tpDays && !$tpDays.childNodes.length) {
+      for (var d2 = 1; d2 <= 7; d2++) {
+        var btn = el('button', 'tp-day on', DAY_NAMES[d2].replace('周', ''));
+        btn.type = 'button';
+        btn.setAttribute('data-tp-day', String(d2));
+        $tpDays.appendChild(btn);
+      }
+    }
+  }
+
+  function openTimer() {
+    if (readOnly) { toast('访客模式不能改时间规划', true); return; }
+    $timerModal.hidden = false;
+    renderTimerPanel();
+  }
+
+  $btnTimer.addEventListener('click', openTimer);
+  document.getElementById('timer-close').addEventListener('click', function () { $timerModal.hidden = true; });
+
+  $timerRate.addEventListener('input', function () {
+    var v = Math.max(0, Math.min(100, Math.round(Number($timerRate.value) || 0)));
+    timerOf().rate = v;
+    $timerRateVal.textContent = v + '%';
+    syncPoints();
+    saveNow();
+  });
+
+  document.getElementById('tc-add').addEventListener('click', function () {
+    var title = $tcTitle.value.trim();
+    if (!title) { toast('先写课程名', true); return; }
+    var day = Math.round(Number($tcDay.value));
+    var s = hhmmToMin($tcStart.value), e = hhmmToMin($tcEnd.value);
+    if (!isFinite(s) || !isFinite(e) || e <= s) { toast('结束时间要晚于开始时间', true); return; }
+    timerOf().courses.push({ id: makeId(), day: day, start: s, end: e, title: title.slice(0, 30) });
+    $tcTitle.value = '';
+    syncPoints(); saveNow(); render();
+  });
+
+  document.getElementById('tp-add').addEventListener('click', function () {
+    var title = $tpTitle.value.trim();
+    if (!title) { toast('先写事项名', true); return; }
+    var s = hhmmToMin($tpStart.value), e = hhmmToMin($tpEnd.value);
+    if (!isFinite(s) || !isFinite(e) || e <= s) { toast('结束时间要晚于开始时间', true); return; }
+    var days = [];
+    Array.prototype.forEach.call($tpDays.querySelectorAll('[data-tp-day]'), function (b) {
+      if (b.classList.contains('on')) days.push(Number(b.getAttribute('data-tp-day')));
+    });
+    if (!days.length) { toast('至少选一天', true); return; }
+    timerOf().plans.push({ id: makeId(), days: days, start: s, end: e, title: title.slice(0, 30) });
+    $tpTitle.value = '';
+    syncPoints(); saveNow(); render();
+  });
+
+  $tpDays.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('[data-tp-day]') : null;
+    if (!b) return;
+    b.classList.toggle('on');
+  });
+
+  $timerModal.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!(t instanceof Element)) return;
+    var dc = t.closest('[data-tc-del]');
+    if (dc) {
+      var cid = dc.getAttribute('data-tc-del');
+      timerOf().courses = timerOf().courses.filter(function (x) { return x.id !== cid; });
+      syncPoints(); saveNow(); render();
+      return;
+    }
+    var dp = t.closest('[data-tp-del]');
+    if (dp) {
+      var pid = dp.getAttribute('data-tp-del');
+      timerOf().plans = timerOf().plans.filter(function (x) { return x.id !== pid; });
+      syncPoints(); saveNow(); render();
+    }
+  });
 
   /* ---------------- 蓝图：市场 / 我的蓝图库 ---------------- */
   var BP_CATS = [

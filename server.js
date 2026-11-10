@@ -41,7 +41,7 @@ const LEGACY_TREE = path.join(DATA_DIR, 'tree.json');
 const LEGACY_NOTES = path.join(DATA_DIR, 'notes');
 
 const START_PORT = Number(process.env.PORT || 5173);
-const API_VERSION = 11;
+const API_VERSION = 12;
 // TT_PUBLIC=1：准备放到公网时打开。会启用严格安全头、Secure Cookie、HSTS、禁止被 iframe 嵌入
 const PUBLIC_MODE = process.env.TT_PUBLIC === '1';
 // 只允许这几个文件被静态访问；数据目录、源码、备份一律不对外
@@ -49,7 +49,7 @@ const STATIC_FILES = new Set(['/index.html', '/favicon.ico', '/robots.txt']);   
 const STARTED_AT = Date.now();
 const HOST = process.env.HOST || '127.0.0.1';
 const MAX_BODY = 64 * 1024 * 1024;
-const VERSION = 6;
+const VERSION = 7;
 const INITIAL_POINTS = 10;
 const SESSION_DAYS = 30;
 
@@ -95,7 +95,9 @@ function defaultTree() {
     files: [],
     exp: 0,
     tasks: [],
-    week: { key: '' }
+    week: { key: '' },
+    /* 时间规划：把一周的空闲时间按转化率换成科技点 */
+    timer: { rate: 50, courses: [], plans: [], spent: 0, bonus: 0, weekKey: '' }
   };
 }
 
@@ -407,6 +409,47 @@ function normalizeTask(raw) {
   };
 }
 
+function sanitizeTimer(raw) {
+  const t = { rate: 50, courses: [], plans: [], spent: 0, bonus: 0, weekKey: '' };
+  if (!raw || typeof raw !== 'object') return t;
+  const rate = Number(raw.rate);
+  t.rate = isFinite(rate) ? Math.max(0, Math.min(100, Math.round(rate))) : 50;
+  const spent = Number(raw.spent), bonus = Number(raw.bonus);
+  t.spent = isFinite(spent) && spent > 0 ? Math.round(spent * 10) / 10 : 0;
+  t.bonus = isFinite(bonus) && bonus > 0 ? Math.round(bonus * 10) / 10 : 0;
+  t.weekKey = typeof raw.weekKey === 'string' ? raw.weekKey.slice(0, 20) : '';
+
+  (Array.isArray(raw.courses) ? raw.courses : []).forEach((c) => {
+    if (!c || typeof c !== 'object') return;
+    const day = Math.round(Number(c.day));
+    const start = Math.round(Number(c.start)), end = Math.round(Number(c.end));
+    if (!(day >= 1 && day <= 7) || !isFinite(start) || !isFinite(end) || end <= start) return;
+    t.courses.push({
+      id: typeof c.id === 'string' && c.id ? c.id.slice(0, 64) : newId('c'),
+      day: day, start: start, end: end,
+      title: String(c.title || '').trim().slice(0, 30) || '课程'
+    });
+  });
+
+  (Array.isArray(raw.plans) ? raw.plans : []).forEach((p) => {
+    if (!p || typeof p !== 'object') return;
+    const start = Math.round(Number(p.start)), end = Math.round(Number(p.end));
+    if (!isFinite(start) || !isFinite(end) || end <= start) return;
+    let days = (Array.isArray(p.days) ? p.days : [])
+      .map((x) => Math.round(Number(x)))
+      .filter((d) => d >= 1 && d <= 7);
+    days = Array.from(new Set(days));
+    if (!days.length) days = [1, 2, 3, 4, 5, 6, 7];
+    t.plans.push({
+      id: typeof p.id === 'string' && p.id ? p.id.slice(0, 64) : newId('p'),
+      days: days, start: start, end: end,
+      title: String(p.title || '').trim().slice(0, 30) || '日常安排'
+    });
+  });
+
+  return t;
+}
+
 function sanitizeTree(raw) {
   const tree = defaultTree();
   if (!raw || typeof raw !== 'object') return tree;
@@ -426,7 +469,7 @@ function sanitizeTree(raw) {
   const catIds = new Set(cats.map((c) => c.id));
 
   const pts = Number(raw.points);
-  tree.points = isFinite(pts) && pts >= 0 ? Math.floor(pts) : INITIAL_POINTS;
+  tree.points = isFinite(pts) && pts >= 0 ? Math.round(pts * 10) / 10 : INITIAL_POINTS;
 
   const seen = new Set();
   const list = [];
@@ -495,6 +538,7 @@ function sanitizeTree(raw) {
   tree.week = (raw.week && typeof raw.week === 'object' && typeof raw.week.key === 'string')
     ? { key: raw.week.key.slice(0, 20) }
     : { key: '' };
+  tree.timer = sanitizeTimer(raw.timer);
 
   return tree;
 }
@@ -889,7 +933,8 @@ async function handleApi(req, res, url, user) {
       abilities: tree.abilities,
       files: files,
       tasks: tree.tasks,
-      week: tree.week
+      week: tree.week,
+      timer: tree.timer
     });
   }
 
