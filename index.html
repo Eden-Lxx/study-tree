@@ -952,7 +952,7 @@
     </div>
     <p class="auth-err" id="auth-err"></p>
     <button class="btn-primary" id="auth-go" type="button" style="width:100%">登录</button>
-    <p class="auth-tip">数据按账号隔离，各自存在 <code style="font-family:var(--mono);font-size:11px">data/users/</code> 下。登录后可以发布、下载蓝图。</p>
+    <p class="auth-tip">数据按账号隔离，存储在服务器私有目录。登录后可以发布、下载蓝图。</p>
   </div>
 </div>
 
@@ -6556,7 +6556,7 @@
       loadFriends();
       fetch(API.status).then(function (r) { return r.json(); }).then(function (s) {
         if (!s) return;
-        $dataDir.textContent = 'data/users/' + (s.user ? s.user.name : '');
+        $dataDir.textContent = '服务器私有目录' + (s.user ? ' · ' + s.user.name : '');
         $dataDir.title = s.user ? s.user.name : '';
       }).catch(function () {});
     }).catch(function (e) {

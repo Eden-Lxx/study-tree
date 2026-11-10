@@ -731,7 +731,9 @@ async function handleAuth(req, res, url) {
 
   if (p === '/api/auth/me' && req.method === 'GET') {
     const u = currentUser(req);
-    return sendJson(res, 200, { user: publicUser(u), userCount: users.length });
+    const payload = { user: publicUser(u) };
+    if (u) payload.userCount = users.length;
+    return sendJson(res, 200, payload);
   }
 
   if (p === '/api/auth/register' && req.method === 'POST') {
@@ -1806,12 +1808,20 @@ const server = http.createServer(async (req, res) => {
   securityHeaders(res);
   try {
     if (url.pathname === '/api/hello' && req.method === 'GET') {
-      return sendJson(res, 200, {
+      const payload = {
         app: 'study-tree',
-        apiVersion: API_VERSION,
-        startedAt: STARTED_AT,
-        pid: process.pid
-      });
+        apiVersion: API_VERSION
+      };
+      // pid / startedAt 只在本机开发模式（未开 TT_PUBLIC）下返回，
+      // 供启动自检探测是否已有实例在跑；公网部署不暴露进程信息。
+      // 注意：公网模式下 Node 常只监听 127.0.0.1 由 Nginx 反代，
+      // 此时所有请求的 remoteAddress 都是回环，无法据此区分内外，
+      // 所以改用 PUBLIC_MODE 开关来判断。
+      if (!PUBLIC_MODE) {
+        payload.pid = process.pid;
+        payload.startedAt = STARTED_AT;
+      }
+      return sendJson(res, 200, payload);
     }
 
     /* 使用说明：存在服务器里，前端点击后渲染 */
