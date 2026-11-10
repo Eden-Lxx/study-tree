@@ -355,6 +355,21 @@ function issueSession(req, res, user) {
     (https ? '; Secure' : ''));
 }
 
+/* 清理过期会话，避免 sessions.json 无限膨胀 */
+function pruneSessions() {
+  const now = Date.now();
+  let n = 0;
+  Object.keys(sessions).forEach((t) => {
+    const s = sessions[t];
+    if (!s || !s.exp || s.exp < now) {
+      delete sessions[t];
+      n++;
+    }
+  });
+  if (n) writeJson(SESSIONS_FILE, sessions).catch(() => {});
+  return n;
+}
+
 function userDir(uid) {
   return path.join(USERS_DIR, uid);
 }
@@ -829,6 +844,45 @@ async function handleAuth(req, res, url) {
     res.setHeader('Set-Cookie',
       'sid=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0' + (PUBLIC_MODE ? '; Secure' : ''));
     return sendJson(res, 200, { ok: true });
+  }
+
+  /* 修改密码：校验旧密码，改完后注销该用户的其他会话，只保留当前这台设备 */
+  if (p === '/api/auth/password' && req.method === 'POST') {
+    let body;
+    try { body = JSON.parse((await readBody(req)).toString('utf8') || '{}'); }
+    catch (e) { return fail(res, 400, '请求格式有误'); }
+
+    const oldPass = String(body.oldPassword || '');
+    const newPass = String(body.newPassword || '');
+    if (!oldPass || !newPass) return fail(res, 400, '旧密码和新密码都要填');
+    if (newPass.length < 8) return fail(res, 400, '新密码至少 8 位');
+    if (newPass === oldPass) return fail(res, 400, '新密码不能和旧密码一样');
+
+    const me = currentUser(req);
+    if (!me) return fail(res, 401, '请先登录');
+
+    const oldHash = hashPassword(oldPass, me.salt);
+    if (oldHash.length !== me.hash.length || !crypto.timingSafeEqual(Buffer.from(oldHash), Buffer.from(me.hash))) {
+      return fail(res, 401, '旧密码不对');
+    }
+
+    const salt = crypto.randomBytes(16).toString('hex');
+    me.salt = salt;
+    me.hash = hashPassword(newPass, salt);
+    me.passwordChangedAt = Date.now();
+    await writeJson(USERS_FILE, users);
+
+    const curToken = parseCookies(req).sid;
+    let killed = 0;
+    Object.keys(sessions).forEach((t) => {
+      if (sessions[t] && sessions[t].uid === me.id && t !== curToken) {
+        delete sessions[t];
+        killed++;
+      }
+    });
+    if (killed) await writeJson(SESSIONS_FILE, sessions).catch(() => {});
+
+    return sendJson(res, 200, { ok: true, killed: killed });
   }
 
   return fail(res, 404, '接口不存在');
@@ -1910,6 +1964,9 @@ async function start(port, attempt = 0) {
   try {
     await ensureDirs();
     await loadAuth();
+    const pruned = pruneSessions();
+    if (pruned) console.log('[study-tree] 已清理 ' + pruned + ' 个过期会话');
+    setInterval(pruneSessions, 3600 * 1000).unref();
   } catch (e) {
     console.error('[study-tree] 初始化失败：' + e.message);
     process.exit(1);
