@@ -846,6 +846,26 @@
     .banner{top:56px;padding:8px 12px;font-size:12px;gap:8px}
     .banner .btn-ghost{padding:4px 8px;font-size:11.5px}
   }
+
+  /* ============ 视觉优化（覆盖层，不改变任何功能逻辑） ============ */
+  /* 连线：已点亮路径用青绿渐变发光 */
+  .wires .wire-hot path{stroke:url(#wireGrad);stroke-width:2;filter:drop-shadow(0 0 3px rgba(94,234,212,.55))}
+  #links path.hot{stroke:url(#wireGrad);stroke-width:2;filter:drop-shadow(0 0 4px rgba(94,234,212,.5))}
+  /* 卡片：圆角更柔和 + hover 抬升（注意：不 transition transform，避免干扰拖动） */
+  .card{border-radius:14px;transition:box-shadow .35s cubic-bezier(.22,1,.36,1),border-color .35s}
+  .card:hover{transform:translateY(-3px);border-color:rgba(122,152,200,.32);box-shadow:0 16px 40px -20px rgba(0,0,0,.8),0 0 0 1px rgba(122,152,200,.12)}
+  /* 已点亮卡片：呼吸光晕 */
+  .card.is-unlocked{animation:vpCardGlow 3s ease-in-out infinite}
+  @keyframes vpCardGlow{
+    0%,100%{box-shadow:0 10px 28px -18px rgba(52,211,153,.75),inset 0 0 24px -14px rgba(52,211,153,.55)}
+    50%{box-shadow:0 12px 34px -16px rgba(52,211,153,.95),inset 0 0 30px -12px rgba(52,211,153,.7)}
+  }
+  /* 可点亮卡片：呼吸提示 */
+  .card.is-ready{animation:vpReadyPulse 2.4s ease-in-out infinite}
+  @keyframes vpReadyPulse{
+    0%,100%{box-shadow:0 0 0 0 rgba(245,185,66,0)}
+    50%{box-shadow:0 0 22px -6px rgba(245,185,66,.45)}
+  }
 </style>
 </head>
 <body>
@@ -895,7 +915,7 @@
     </div>
     <div class="field">
       <label for="auth-pass">密码</label>
-      <input id="auth-pass" type="password" maxlength="64" autocomplete="current-password" placeholder="至少 6 位">
+      <input id="auth-pass" type="password" maxlength="64" autocomplete="current-password" placeholder="至少 8 位">
     </div>
     <p class="auth-err" id="auth-err"></p>
     <button class="btn-primary" id="auth-go" type="button" style="width:100%">登录</button>
@@ -2453,7 +2473,7 @@
         var kp = pos[k.id];
         if (!kp) return;
         var x2 = kp.x, y2 = kp.y + CARD_H / 2;
-        var dx = Math.max(36, (x2 - x1) * 0.5);
+        var dx = Math.max(36, (x2 - x1) * 0.55);
         var seg = 'M' + r1(x1) + ' ' + r1(y1) +
           ' C' + r1(x1 + dx) + ' ' + r1(y1) + ',' + r1(x2 - dx) + ' ' + r1(y2) + ',' + r1(x2) + ' ' + r1(y2);
         if (k.unlocked) hotBranch += seg; else branchPaths += seg;
@@ -2469,7 +2489,9 @@
       var gap = b.x - (a.x + CARD_W);
       var seg = '';
       if (gap <= 96) {
-        seg = 'M' + r1(a.x + CARD_W) + ' ' + r1(ay) + ' L' + r1(b.x) + ' ' + r1(by);
+        var midx = (a.x + CARD_W + b.x) / 2;
+        seg = 'M' + r1(a.x + CARD_W) + ' ' + r1(ay) +
+          ' C' + r1(midx) + ' ' + r1(ay) + ',' + r1(midx) + ' ' + r1(by) + ',' + r1(b.x) + ' ' + r1(by);
       } else {
         var lane = Math.min(a.y, b.y) - 26;
         seg = roundedPath([
@@ -2477,12 +2499,12 @@
           { x: a.x + CARD_W / 2, y: lane },
           { x: b.x + CARD_W / 2, y: lane },
           { x: b.x + CARD_W / 2, y: b.y }
-        ], 10);
+        ], 16);
       }
       if (b.unlocked) hotChain += seg; else chainPaths += seg;
     });
 
-    var svgHtml = '';
+    var svgHtml = '<defs><linearGradient id="wireGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#38bdf8"/><stop offset="1" stop-color="#34d399"/></linearGradient></defs>';
     if (branchPaths) svgHtml += '<g class="wire-branch"><path d="' + branchPaths + '"/></g>';
     if (chainPaths) svgHtml += '<g class="wire-chain"><path d="' + chainPaths + '"/></g>';
     if (hotBranch) svgHtml += '<g class="wire-hot"><path d="' + hotBranch + '"/></g>';
@@ -2518,9 +2540,7 @@
   function drawLinks() {
     if (!$links || !$rail) return;
     var box = $links.getBoundingClientRect();
-    var railRight = $rail.getBoundingClientRect().right - box.left;
     var parts = [], hot = [];
-    var laneIndex = 0;
 
     state.abilities.forEach(function (r) {
       if (r.parentId) return;
@@ -2528,9 +2548,6 @@
       if (!kids.length) return;
       var cardEl = $railInner.querySelector('[data-node="' + r.id + '"]');
       if (!cardEl) return;
-
-      var lane = railRight + 14 + (laneIndex % 4) * 9;
-      laneIndex++;
 
       var rr = cardEl.getBoundingClientRect();
       var x1 = rr.right - box.left;
@@ -2548,28 +2565,24 @@
         var kr = kel.getBoundingClientRect();
         var x2 = kr.left - box.left;
         var y2 = kr.top + kr.height / 2 - box.top;
-        if (x2 < lane + 10) return;
         targets.push({ x: x2, y: y2, hot: k.unlocked });
       });
       if (!targets.length) return;
 
-      var ys = targets.map(function (t) { return t.y; }).concat([y1]);
-      var top = Math.min.apply(null, ys);
-      var bottom = Math.max.apply(null, ys);
-
-      parts.push('M' + r1(x1) + ' ' + r1(y1) + ' L' + r1(lane) + ' ' + r1(y1));
-      if (bottom - top > 1) {
-        parts.push('M' + r1(lane) + ' ' + r1(top) + ' L' + r1(lane) + ' ' + r1(bottom));
-      }
+      // 每个子节点一条独立平滑曲线，从父级右缘自然弯曲到子节点左缘
       targets.forEach(function (t) {
-        var mx = (lane + t.x) / 2;
-        var seg = 'M' + r1(lane) + ' ' + r1(t.y) +
-          ' C' + r1(mx) + ' ' + r1(t.y) + ',' + r1(mx) + ' ' + r1(t.y) + ',' + r1(t.x) + ' ' + r1(t.y);
+        var dx = t.x - x1;
+        var cx1 = x1 + dx * 0.45;
+        var cy1 = y1;
+        var cx2 = x1 + dx * 0.55;
+        var cy2 = t.y;
+        var seg = 'M' + r1(x1) + ' ' + r1(y1) +
+          ' C' + r1(cx1) + ' ' + r1(cy1) + ',' + r1(cx2) + ' ' + r1(cy2) + ',' + r1(t.x) + ' ' + r1(t.y);
         (t.hot ? hot : parts).push(seg);
       });
     });
 
-    var out = '';
+    var out = '<defs><linearGradient id="wireGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#38bdf8"/><stop offset="1" stop-color="#34d399"/></linearGradient></defs>';
     if (parts.length) out += '<path d="' + parts.join(' ') + '"/>';
     if (hot.length) out += '<path class="hot" d="' + hot.join(' ') + '"/>';
     $links.innerHTML = out;
@@ -5271,6 +5284,9 @@
       var el2 = $world.querySelector('[data-node="' + id + '"]');
       if (el2) el2.style.transform = 'translateY(' + dWorld + 'px)';
     });
+
+    // 拖动父级时实时重绘连线，保证连线跟手、转移连贯
+    drawLinks();
 
     var over = document.elementFromPoint(e.clientX, e.clientY);
     var catEl = over && over.closest ? over.closest('[data-cat]') : null;
